@@ -53,7 +53,7 @@ class Controller:
             # print(f"After jump: v_y = {self._model.ball.v_y}")  # Debugging   
             # print(f'Gravity: {self._model._gravity}')
             
-            self._frame = 0
+            # self._frame = 0
 
         if pyxel.btn(pyxel.KEY_D):
             self._model.push_right()
@@ -68,10 +68,10 @@ class Controller:
         #     print()
         
         
-        # if self._frame % (self._model.fps // 2) == 0:
-        #     self._count += 1
-        #     print(f'Frame {self._count}:')
-        #     print(f'x={self._model.ball.x}, y={self._model.ball.y}\nx_v={self._model.ball.v_x}, y_v={self._model.ball.v_y}')
+        if self._frame % (self._model.fps // 2) == 0:
+            self._count += 1
+            print(f'Frame {self._count}:')
+            print(f'x={self._model.ball.x}, y={self._model.ball.y}\nx_v={self._model.ball.v_x}, y_v={self._model.ball.v_y}\nx_a={self._model.ball.a_x}, y_a={self._model.ball.a_y}')
 
 
     def draw(self):

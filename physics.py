@@ -101,27 +101,11 @@ class PhysicsModel:
 
             case Surface.BOTTOM:
                 self._ball.y = self._height - self._ball.radius 
-
-        # if self._ball.x + self._ball.radius + self._ball.v_x > self._width:
-        #     self._ball.x = self._width - self._ball.radius
-        #     self._ball.v_y = 0
-        
-        # if self._ball.x - self._ball.radius + self._ball.v_x < 0:
-        #     self._ball.x = self._ball.radius
-        #     self._ball.v_y = 0
-
-        # if self._ball.y + self._ball.radius + self._ball.v_y > self._height:
-        #     self._ball.y = self._height - self._ball.radius
-        #     self._ball.v_y = 0
-
-        # if self._ball.y - self._ball.radius + self._ball.v_y < 0:
-        #     self._ball.y = self._ball.radius
-        #     self._ball.v_y = 0
-
-        # if abs(self._ball.v_x) < 0.000001:
-        #     self._ball.v_x = 0
-        # if abs(self._ball.v_y) < 0.000001:
-        #     self._ball.v_y = 0
+    
+        if abs(self._ball.v_x) < 0.000001:
+            self._ball.v_x = 0
+        if abs(self._ball.v_y) < 0.000001:
+            self._ball.v_y = 0
 
 
     def height_update(self):
@@ -129,8 +113,8 @@ class PhysicsModel:
             self._bounce()
         self._accelerate_x()
         self._accelerate_y()
-        self._move_y()
         self._move_x()
+        self._move_y()
 
     def _move_x(self):
         self._ball.x += self._ball.v_x
@@ -172,13 +156,10 @@ class PhysicsModel:
         self._conf_adjust()
 
 
-
     def jump(self):
         self._conf_adjust()
         
         self._ball.v_y = -Constants.JUMP_HEIGHT/self._fps
-
-
 
     def push_right(self):
         if self._ball.v_x < Constants.SPEED_LIMIT_X/self._fps:
