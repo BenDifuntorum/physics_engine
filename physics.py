@@ -7,7 +7,7 @@ class Constants:
     GRAVITY = 4000
     BOUNCE_FACTOR_X = 1
     BOUNCE_FACTOR_Y = 0.87
-    FRICTIONAL_CONSTANT = 0.95
+    FRICTIONAL_CONSTANT = 0.95 ** 60
     SPEED_LIMIT_X = 540
     JUMP_HEIGHT = 1100
     SIDEWARD_PUSH_ACCELERATION = 2100
@@ -16,6 +16,12 @@ class Constants:
 class PhysicsModel:
     def __init__(self, fps: int, width: int, height: int):
         self._gravity = Constants.GRAVITY / fps**2
+        self._bounce_factor_x = Constants.BOUNCE_FACTOR_X 
+        self._bounce_factor_y = Constants.BOUNCE_FACTOR_Y
+        self._frictional_constant = Constants.FRICTIONAL_CONSTANT ** (1/fps)
+        print(self._bounce_factor_x, self._bounce_factor_y, self._frictional_constant)
+
+
         self._width = width
         self._height = height
         self._fps = fps
@@ -47,12 +53,22 @@ class PhysicsModel:
             return Surface.BOTTOM
 
     @property
-    def ball_dist_from_next_surface(self):
+    def ball_dist_from_next_surface_x(self):
         return min(
             self._ball.left-0, 
-            self._width-self._ball.right, 
+            self._width-self._ball.right)
+    
+    @property
+    def ball_dist_from_next_surface_y(self):
+        return min(
             self._ball.top-0, 
             self._height-self._ball.bottom)
+
+    @property
+    def ball_dist_from_next_surface(self):
+        return min(
+            self.ball_dist_from_next_surface_x,
+            self.ball_dist_from_next_surface_y)
 
 
     def _init_ball(self):
@@ -69,7 +85,7 @@ class PhysicsModel:
             )
         
     def _conf_adjust(self):
-        if self.ball_dist_from_next_surface < abs(self._ball.v_y) or self.ball_dist_from_next_surface < abs(self._ball.v_x):
+        if self.ball_dist_from_next_surface_y < abs(self._ball.v_y) or self.ball_dist_from_next_surface_x < abs(self._ball.v_x):
             self._adjust()
 
     def _adjust(self):
@@ -86,10 +102,26 @@ class PhysicsModel:
             case Surface.BOTTOM:
                 self._ball.y = self._height - self._ball.radius 
 
-        if abs(self._ball.v_x) < 0.000001:
-            self._ball.v_x = 0
-        if abs(self._ball.v_y) < 0.000001:
-            self._ball.v_y = 0
+        # if self._ball.x + self._ball.radius + self._ball.v_x > self._width:
+        #     self._ball.x = self._width - self._ball.radius
+        #     self._ball.v_y = 0
+        
+        # if self._ball.x - self._ball.radius + self._ball.v_x < 0:
+        #     self._ball.x = self._ball.radius
+        #     self._ball.v_y = 0
+
+        # if self._ball.y + self._ball.radius + self._ball.v_y > self._height:
+        #     self._ball.y = self._height - self._ball.radius
+        #     self._ball.v_y = 0
+
+        # if self._ball.y - self._ball.radius + self._ball.v_y < 0:
+        #     self._ball.y = self._ball.radius
+        #     self._ball.v_y = 0
+
+        # if abs(self._ball.v_x) < 0.000001:
+        #     self._ball.v_x = 0
+        # if abs(self._ball.v_y) < 0.000001:
+        #     self._ball.v_y = 0
 
 
     def height_update(self):
@@ -97,8 +129,8 @@ class PhysicsModel:
             self._bounce()
         self._accelerate_x()
         self._accelerate_y()
-        self._move_x()
         self._move_y()
+        self._move_x()
 
     def _move_x(self):
         self._ball.x += self._ball.v_x
@@ -106,13 +138,19 @@ class PhysicsModel:
     def _move_y(self):
         self._ball.y += self._ball.v_y
 
-    def _bounce_x(self, bounce_factor: float = Constants.BOUNCE_FACTOR_X):
-        self._ball.v_x *= -bounce_factor
-        self._ball.v_y *= Constants.FRICTIONAL_CONSTANT
+    def _bounce_x(self, bounce_factor: float = 0):
+        if bounce_factor == 0:
+            bounce_factor = self._bounce_factor_x
 
-    def _bounce_y(self, bounce_factor: float = Constants.BOUNCE_FACTOR_Y):
+        self._ball.v_x *= -bounce_factor
+        self._ball.v_y *= self._frictional_constant
+
+    def _bounce_y(self, bounce_factor: float = 0):
+        if bounce_factor == 0:
+            bounce_factor = self._bounce_factor_y
+
         self._ball.v_y *= -bounce_factor
-        self._ball.v_x *= Constants.FRICTIONAL_CONSTANT
+        self._ball.v_x *= self._frictional_constant
 
     def _accelerate_x(self):
         self._ball.v_x += self._ball.a_x
