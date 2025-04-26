@@ -1,13 +1,13 @@
-from physics_types import Ball, Surface
+from .physics_types import Ball, Surface
 from dataclasses import dataclass
 
 @dataclass
-class Constants:
+class _Constants:
     """Constants for the physics model. Calculated against the fps of the game."""
     GRAVITY = 4000
     BOUNCE_FACTOR_X = 1
-    BOUNCE_FACTOR_Y = 0.87
-    FRICTIONAL_CONSTANT = 0.95 ** 60
+    BOUNCE_FACTOR_Y = 1
+    FRICTIONAL_CONSTANT = 1
     SPEED_LIMIT_X = 540
     JUMP_HEIGHT = 1100
     SIDEWARD_PUSH_ACCELERATION = 2100
@@ -15,12 +15,10 @@ class Constants:
 
 class PhysicsModel:
     def __init__(self, fps: int, width: int, height: int):
-        self._gravity = Constants.GRAVITY / fps**2
-        self._bounce_factor_x = Constants.BOUNCE_FACTOR_X 
-        self._bounce_factor_y = Constants.BOUNCE_FACTOR_Y
-        self._frictional_constant = Constants.FRICTIONAL_CONSTANT ** (1/fps)
-        print(self._bounce_factor_x, self._bounce_factor_y, self._frictional_constant)
-
+        self._gravity = _Constants.GRAVITY / fps**2
+        self._bounce_factor_x = _Constants.BOUNCE_FACTOR_X 
+        self._bounce_factor_y = _Constants.BOUNCE_FACTOR_Y
+        self._frictional_constant = _Constants.FRICTIONAL_CONSTANT ** (1/fps)
 
         self._width = width
         self._height = height
@@ -74,13 +72,15 @@ class PhysicsModel:
     def _init_ball(self):
         '''For testing purposes, the ball is initialized at the center of the screen.
         The ball is not moving at the start of the game.'''
+        if type(self) != PhysicsModel:
+            raise ValueError('This method cannot be inherited')
         self._ball = Ball(
             x=self._width//2, 
-            y=self._height//2, 
+            y=self._height, 
             v_x=0, 
             v_y=0, 
             a_x=0, 
-            a_y=self._gravity,
+            a_y=0,
             radius=5, 
             )
         
@@ -159,12 +159,12 @@ class PhysicsModel:
     def jump(self):
         self._conf_adjust()
         
-        self._ball.v_y = -Constants.JUMP_HEIGHT/self._fps
+        self._ball.v_y = -_Constants.JUMP_HEIGHT/self._fps
 
     def push_right(self):
-        if self._ball.v_x < Constants.SPEED_LIMIT_X/self._fps:
-            self._ball.v_x += Constants.SIDEWARD_PUSH_ACCELERATION/(self._fps**2)
+        if self._ball.v_x < _Constants.SPEED_LIMIT_X/self._fps:
+            self._ball.v_x += _Constants.SIDEWARD_PUSH_ACCELERATION/(self._fps**2)
 
     def push_left(self):
-        if self._ball.v_x > -Constants.SPEED_LIMIT_X/self._fps:
-            self._ball.v_x -= Constants.SIDEWARD_PUSH_ACCELERATION/(self._fps**2)
+        if self._ball.v_x > -_Constants.SPEED_LIMIT_X/self._fps:
+            self._ball.v_x -= _Constants.SIDEWARD_PUSH_ACCELERATION/(self._fps**2)
