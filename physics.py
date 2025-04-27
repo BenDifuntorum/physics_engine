@@ -31,6 +31,7 @@ class PhysicsModel:
         self._fps = fps
         self._init_ball()
 
+
     @property
     def gravity(self):
         return self._gravity
