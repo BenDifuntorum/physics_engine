@@ -1,13 +1,7 @@
 from __future__ import annotations
-from curses import raw
-from dataclasses import dataclass
 from enum import Enum, auto
 from abc import ABC, abstractmethod
 import math
-
-from pyrsistent import v
-from serial import PortNotOpenError
-
 
 
 class Shape(ABC):
@@ -50,9 +44,9 @@ class Shape(ABC):
 
 
 class Point:
-    def __init__(self, x: float, y: float):
-        self.p_x = x
-        self.p_y = y
+    def __init__(self, p_x: float, p_y: float):
+        self.p_x = p_x
+        self.p_y = p_y
 
     def __repr__(self):
         return f"Point({self.p_x}, {self.p_y})"
@@ -149,17 +143,22 @@ class Polygon(Shape):
 
 
 class Circle(Shape):
-    def __init__(self, x: float, y: float, r: float):
-        self._x: float = x
-        self._y: float = y
+    def __init__(self, p_x: float, p_y: float, r: float):
+        self._p_x: float = p_x
+        self._p_y: float = p_y
+
         self._r: float = r
 
     def __post_init__(self):
         if self._r <= 0:
             raise ValueError("Radius must be positive.")
+        
+    @classmethod
+    def from_point(cls, point: Point, radius: float) -> Circle:
+        return cls(p_x=point.p_x, p_y=point.p_y, r=radius)
 
     def __repr__(self):
-        return f"Circle(x={self._x}, y={self._y}, radius={self._r})"
+        return f"Circle(x={self._p_x}, y={self._p_y}, radius={self._r})"
     
     def __eq__(self, value: object) -> bool:
         return super().__eq__(value)
@@ -174,7 +173,7 @@ class Circle(Shape):
     
     @property
     def center(self) -> Point:
-        return Point(self._x, self._y)
+        return Point(self._p_x, self._p_y)
     
     @property
     def edges(self) -> tuple[Line, ...]:
@@ -184,58 +183,84 @@ class Circle(Shape):
         for i in range(num_edges):
             angle1 = (2 * math.pi / num_edges) * i
             angle2 = (2 * math.pi / num_edges) * (i + 1)
-            start = Point(self._x + self._r * math.cos(angle1), self._y + self._r * math.sin(angle1))
-            end = Point(self._x + self._r * math.cos(angle2), self._y + self._r * math.sin(angle2))
+            start = Point(self._p_x + self._r * math.cos(angle1), self._p_y + self._r * math.sin(angle1))
+            end = Point(self._p_x + self._r * math.cos(angle2), self._p_y + self._r * math.sin(angle2))
             edges.append(Line(start, end))
         return tuple(edges)
     
     @property
     def top(self):
-        return self._y - self._r
+        return self._p_y - self._r
 
     @property
     def bottom(self):
-        return self._y + self._r
+        return self._p_y + self._r
 
     @property
     def left(self):
-        return self._x - self._r
+        return self._p_x - self._r
 
     @property
     def right(self):
-        return self._x + self._r
+        return self._p_x + self._r
 
 
 class Ball(Circle):
-    def __init__(self, *, x: float, y: float, v_x: float, v_y: float, a_x: float, a_y: float, radius: float):
-        super().__init__(x, y, radius)
+    def __init__(self, *, p_x: float, p_y: float, v_x: float, v_y: float, a_x: float, a_y: float, r: float):
+        super().__init__(p_x=p_x, p_y=p_y, r=r)
         self._v_x = v_x
         self._v_y = v_y
         self._a_x = a_x
         self._a_y = a_y
 
     def __repr__(self):
-        return f"Ball(x={self._x}, y={self._y}, v_x={self.v_x}, v_y={self.v_y}, a_x={self.a_x}, a_y={self.a_y}, radius={self._r})"
+        return f"Ball(x={self.p_x}, y={self.p_y}, v_x={self.v_x}, v_y={self.v_y}, a_x={self.a_x}, a_y={self.a_y}, radius={self.r})"
     
     @classmethod
-    def from_bearing(cls, *, x: float, y: float, v_m: float, v_d: float, a_m: float = 0.0, a_d: float = 0.0, radius: float = 1.0) -> Ball:
+    def from_bearing(cls, *, p_x: float, p_y: float, v_m: float, v_d: float, a_m: float = 0.0, a_d: float = 0.0, radius: float = 1.0) -> Ball:
+        if radius <= 0:
+            raise ValueError("Radius must be positive.")
+        
+        if  v_m < 0 or a_m < 0:
+            raise ValueError("Magnitude must be non-negative.")
+        
+        if v_d < 0 or v_d > 360 or a_d < 0 or a_d > 360:
+            raise ValueError("Direction must be between 0 and 360 degrees.")
+        
+        # Convert polar coordinates to Cartesian coordinates
+        # _p_x = p_m * math.cos(math.radians(p_d))
+        # _p_y = p_m * math.sin(math.radians(p_d))        
         _v_x = v_m * math.cos(math.radians(v_d))
         _v_y = v_m * math.sin(math.radians(v_d))
         _a_x = a_m * math.cos(math.radians(a_d))
         _a_y = a_m * math.sin(math.radians(a_d))
-        return cls(x=x, y=y, v_x=_v_x, v_y=_v_y, a_x=_a_x, a_y=_a_y, radius=radius)
-    
-    @property
-    def p_x(self) -> float:
-        return self._x
-    
-    @property
-    def p_y(self) -> float:
-        return self._y
+
+        return cls(p_x=p_x, p_y=p_y, v_x=_v_x, v_y=_v_y, a_x=_a_x, a_y=_a_y, r=radius)
     
     @property
     def r(self) -> float:
         return self._r
+    
+    @property
+    def p_x(self) -> float:
+        return self._p_x
+    
+    @property
+    def p_y(self) -> float:
+        return self._p_y
+    
+    # @property
+    # def p_m(self) -> float:
+    #     return (self._p_x**2 + self._p_y**2)**0.5
+    
+    # @property
+    # def p_d(self) -> float:
+    #     if self.p_x == 0 and self.p_y == 0:
+    #         return 0.0
+    #     if self.p_x == 0:
+    #         return 90.0 if self.p_y > 0 else 270.0
+    #     raw_deg: float = math.degrees(math.atan2(self.p_y, self.p_x))
+    #     return raw_deg + 360 if raw_deg < 0 else raw_deg
     
     @property
     def v_x(self) -> float:
@@ -280,7 +305,7 @@ class Ball(Circle):
     
     @p_x.setter
     def p_x(self, value: float):
-        self._x = value
+        self._p_x = value
         if self.v_m == 0:
             self._v_x = 0
             self._v_y = 0
@@ -290,7 +315,7 @@ class Ball(Circle):
 
     @p_y.setter
     def p_y(self, value: float):
-        self._y = value
+        self._p_y = value
         if self.v_m == 0:
             self._v_x = 0
             self._v_y = 0
@@ -420,6 +445,8 @@ class Rectangle(Shape):
             Line(bottom_right, bottom_left),
             Line(bottom_left, top_left),
         )
+
+
 
 class SurfaceType(Enum):
     OUT = auto()

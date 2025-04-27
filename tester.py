@@ -2,6 +2,8 @@ import pyxel
 from physics import PhysicsModel, Ball
 import argparse
 
+from physics_types import Surface
+
 
 class TesterModel(PhysicsModel):
     def __init__(self, fps: int, width: int, height: int):
@@ -10,18 +12,14 @@ class TesterModel(PhysicsModel):
         pyxel.init(width, height, fps=fps, title='PHYSICS ENGINE TESTER', quit_key=pyxel.KEY_Q)
 
     def _init_ball(self):
-        '''For testing purposes, the ball is initialized at the center of the screen.
-        The ball is not moving at the start of the game.'''
-        if type(self) != PhysicsModel and type(self) != TesterModel:
-            raise ValueError('Override this method!')
         self._ball = Ball(
-            x=self._width//2, 
-            y=self._height//2, 
+            p_x=self._width//2, 
+            p_y=self._height//2, 
             v_x=0, 
             v_y=0, 
             a_x=0, 
             a_y=0,
-            radius=5, 
+            r=5, 
             )
         
     @property
@@ -42,10 +40,11 @@ class View:
         self._width = width
         self._height = height
     
-    def sample_bounce(self, circle: Ball):
+    def show_screen(self, circle: Ball, platforms: list[Surface]):
         pyxel.cls(col=pyxel.COLOR_BLACK)
-        pyxel.circ(x=circle.x, y=circle.y, r=circle.r, col=pyxel.COLOR_WHITE)
-
+        pyxel.circ(x=circle.p_x, y=circle.p_y, r=circle.r, col=pyxel.COLOR_WHITE)
+        for platform in platforms:
+            pyxel.line(x1=platform.start.p_x, x2=platform.end.p_x, y1=platform.start.p_y, y2=platform.end.p_y, col=pyxel.COLOR_RED)
 
 class Controller:
     def __init__(self, model: TesterModel, view: View):
@@ -78,7 +77,7 @@ class Controller:
             self._model.push_up()
     
         if pyxel.btnp(pyxel.KEY_P):
-            print(self._model.closest_surface)
+            print(self._model.closest_surface, self._model.ball_dist_from_next_surface)
 
         if pyxel.btnp(pyxel.KEY_H):
             print(self._model.ball_dist_from_every_surface)
@@ -102,7 +101,7 @@ class Controller:
 
 
     def draw(self):
-        self._view.sample_bounce(self._model.ball)
+        self._view.show_screen(self._model.ball, self._model.surfaces)
 
 
 def init(fps: int, width: int, height: int):
