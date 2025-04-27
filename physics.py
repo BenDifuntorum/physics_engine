@@ -1,4 +1,4 @@
-from .physics_types import Ball, Surface
+from physics_types import Ball, Surface, Point, SurfaceType
 from dataclasses import dataclass
 
 @dataclass
@@ -19,7 +19,13 @@ class PhysicsModel:
         self._bounce_factor_x = _Constants.BOUNCE_FACTOR_X 
         self._bounce_factor_y = _Constants.BOUNCE_FACTOR_Y
         self._frictional_constant = _Constants.FRICTIONAL_CONSTANT ** (1/fps)
-
+        self._surfaces = [
+            Surface(start=Point(0, 0), end=Point(0, height), surface_types=(SurfaceType.LEFT,)),
+            Surface(start=Point(0, 0), end=Point(width, 0), surface_types=(SurfaceType.TOP,)),
+            Surface(start=Point(width, 0), end=Point(width, height), surface_types=(SurfaceType.RIGHT,)),
+            Surface(start=Point(0, height), end=Point(width, height), surface_types=(SurfaceType.BOTTOM,))
+            ]
+        
         self._width = width
         self._height = height
         self._fps = fps
@@ -34,46 +40,52 @@ class PhysicsModel:
         return self._ball
 
     @property
-    def closest_surface(self) -> Surface:
+    def closest_surface(self) -> SurfaceType:
         dist = self.ball_dist_from_next_surface
         
         if dist == self._ball.left-0:
-            return Surface.LEFT
+            return SurfaceType.LEFT
 
         elif dist == self._width-self._ball.right:
-            return Surface.RIGHT
+            return SurfaceType.RIGHT
 
         elif dist == self._ball.top-0:
-            return Surface.TOP
+            return SurfaceType.TOP
 
         else:
             assert dist == self._height-self._ball.bottom
-            return Surface.BOTTOM
+            return SurfaceType.BOTTOM
 
     @property
-    def ball_dist_from_next_surface_x(self):
-        return min(
-            self._ball.left-0, 
-            self._width-self._ball.right)
+    def ball_dist_from_next_top(self):
+        tops: list[Surface] = [s for s in self._surfaces if s.surface_types == SurfaceType.TOP]
+        distance_top = self._ball.top - 
+
+
+    # @property
+    # def ball_dist_from_next_surface_x(self):
+    #     return min(
+    #         self._ball.left-0, 
+    #         self._width-self._ball.right)
     
-    @property
-    def ball_dist_from_next_surface_y(self):
-        return min(
-            self._ball.top-0, 
-            self._height-self._ball.bottom)
+    # @property
+    # def ball_dist_from_next_surface_y(self):
+    #     return min(
+    #         self._ball.top-0, 
+    #         self._height-self._ball.bottom)
 
-    @property
-    def ball_dist_from_next_surface(self):
-        return min(
-            self.ball_dist_from_next_surface_x,
-            self.ball_dist_from_next_surface_y)
+    # @property
+    # def ball_dist_from_next_surface(self):
+    #     return min(
+    #         self.ball_dist_from_next_surface_x,
+    #         self.ball_dist_from_next_surface_y)
 
 
     def _init_ball(self):
         '''For testing purposes, the ball is initialized at the center of the screen.
         The ball is not moving at the start of the game.'''
         if type(self) != PhysicsModel:
-            raise ValueError('This method cannot be inherited')
+            raise ValueError('Override this method!')
         self._ball = Ball(
             x=self._width//2, 
             y=self._height, 
@@ -90,16 +102,16 @@ class PhysicsModel:
 
     def _adjust(self):
         match self.closest_surface:
-            case Surface.LEFT:
+            case SurfaceType.LEFT:
                 self._ball.x = self._ball.radius 
 
-            case Surface.RIGHT:
+            case SurfaceType.RIGHT:
                 self._ball.x = self._width - self._ball.radius 
 
-            case Surface.TOP:
+            case SurfaceType.TOP:
                 self._ball.y = self._ball.radius 
 
-            case Surface.BOTTOM:
+            case SurfaceType.BOTTOM:
                 self._ball.y = self._height - self._ball.radius 
     
         if abs(self._ball.v_x) < 0.000001:
@@ -146,11 +158,11 @@ class PhysicsModel:
         self._ball.a_y = self._gravity
 
     def _bounce(self):
-        if self.closest_surface in (Surface.TOP, Surface.BOTTOM):
+        if self.closest_surface in (SurfaceType.TOP, SurfaceType.BOTTOM):
             self._bounce_y()
         
         else:
-            assert self.closest_surface in (Surface.LEFT, Surface.RIGHT)
+            assert self.closest_surface in (SurfaceType.LEFT, SurfaceType.RIGHT)
             self._bounce_x()
         
         self._conf_adjust()

@@ -3,12 +3,27 @@ from physics import PhysicsModel, Ball
 import argparse
 
 
-class Model(PhysicsModel):
+class TesterModel(PhysicsModel):
     def __init__(self, fps: int, width: int, height: int):
         super().__init__(fps, width, height)
 
         pyxel.init(width, height, fps=fps, title='PHYSICS ENGINE TESTER', quit_key=pyxel.KEY_Q)
 
+    def _init_ball(self):
+        '''For testing purposes, the ball is initialized at the center of the screen.
+        The ball is not moving at the start of the game.'''
+        if type(self) != PhysicsModel and type(self) != TesterModel:
+            raise ValueError('Override this method!')
+        self._ball = Ball(
+            x=self._width//2, 
+            y=self._height, 
+            v_x=0, 
+            v_y=0, 
+            a_x=0, 
+            a_y=0,
+            radius=5, 
+            )
+        
     @property
     def fps(self):
         return self._fps
@@ -33,7 +48,7 @@ class View:
 
 
 class Controller:
-    def __init__(self, model: Model, view: View):
+    def __init__(self, model: TesterModel, view: View):
         self._view = view
         self._model = model
         self._frame = 0
@@ -79,7 +94,7 @@ class Controller:
 
 
 def init(fps: int, width: int, height: int):
-    model = Model(fps, width, height)
+    model = TesterModel(fps, width, height)
     view = View(width, height)
     controller = Controller(model, view)
 
