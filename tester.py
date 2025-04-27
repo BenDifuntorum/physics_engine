@@ -44,7 +44,7 @@ class View:
     
     def sample_bounce(self, circle: Ball):
         pyxel.cls(col=pyxel.COLOR_BLACK)
-        pyxel.circ(x=circle.x, y=circle.y, r=circle.radius, col=pyxel.COLOR_WHITE)
+        pyxel.circ(x=circle.x, y=circle.y, r=circle.r, col=pyxel.COLOR_WHITE)
 
 
 class Controller:
@@ -61,11 +61,10 @@ class Controller:
         self._frame += 1
         
         self._model.height_update()
-        
+
         if pyxel.btnp(pyxel.KEY_SPACE):
             self._model.jump()
             
-
         if pyxel.btn(pyxel.KEY_D):
             self._model.push_right()
 
@@ -83,6 +82,8 @@ class Controller:
 
         if pyxel.btnp(pyxel.KEY_H):
             print(self._model.ball_dist_from_every_surface)
+
+        
 
 
 

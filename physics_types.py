@@ -1,8 +1,12 @@
 from __future__ import annotations
+from curses import raw
 from dataclasses import dataclass
 from enum import Enum, auto
 from abc import ABC, abstractmethod
 import math
+
+from pyrsistent import v
+from serial import PortNotOpenError
 
 
 
@@ -47,23 +51,23 @@ class Shape(ABC):
 
 class Point:
     def __init__(self, x: float, y: float):
-        self.x = x
-        self.y = y
+        self.p_x = x
+        self.p_y = y
 
     def __repr__(self):
-        return f"Point({self.x}, {self.y})"
+        return f"Point({self.p_x}, {self.p_y})"
 
     def __sub__(self, other: Point) -> Point:
-        return Point(self.x - other.x, self.y - other.y)
+        return Point(self.p_x - other.p_x, self.p_y - other.p_y)
 
     def __add__(self, other: Point) -> Point:
-        return Point(self.x + other.x, self.y + other.y)
+        return Point(self.p_x + other.p_x, self.p_y + other.p_y)
 
     def __mul__(self, scalar: float):
-        return Point(self.x * scalar, self.y * scalar)
+        return Point(self.p_x * scalar, self.p_y * scalar)
 
     def __truediv__(self, scalar: float):
-        return Point(self.x / scalar, self.y / scalar)
+        return Point(self.p_x / scalar, self.p_y / scalar)
 
 
 class Line:
@@ -77,26 +81,27 @@ class Line:
     @property
     def length(self) -> float:
         """Returns the length of the line"""
-        return ((self.end.x - self.start.x) ** 2 + (self.end.y - self.start.y) ** 2) ** 0.5
+        return ((self.end.p_x - self.start.p_x) ** 2 + (self.end.p_y - self.start.p_y) ** 2) ** 0.5
 
     @property
     def slope(self) -> float:
         """Returns the slope of the line"""
-        if self.end.x - self.start.x == 0:
-            return float('inf')  if self.end.y > self.start.y else float('-inf')
-        return (self.end.y - self.start.y) / (self.end.x - self.start.x)
+        if self.end.p_x - self.start.p_x == 0:
+            return float('inf')  if self.end.p_y > self.start.p_y else float('-inf')
+        return (self.end.p_y - self.start.p_y) / (self.end.p_x - self.start.p_x)
     
     @property
     def angle(self) -> float:
         """Returns the angle of the line against the positive x-axis"""
-        if self.end.x - self.start.x == 0:
-            return math.degrees(math.pi / 2) if self.end.y > self.start.y else math.degrees(3*math.pi / 2)
-        raw_deg: float = math.degrees(math.atan2(self.end.y - self.start.y, self.end.x - self.start.x))
+        if self.end.p_x - self.start.p_x == 0:
+            return math.degrees(math.pi / 2) if self.end.p_y > self.start.p_y else math.degrees(3*math.pi / 2)
+        raw_deg: float = math.degrees(math.atan2(self.end.p_y - self.start.p_y, self.end.p_x - self.start.p_x))
         return raw_deg + 360 if raw_deg < 0 else raw_deg
+    
     @property
     def midpoint(self) -> Point:
         """Returns the midpoint of the line"""
-        return Point((self.start.x + self.end.x) / 2, (self.start.y + self.end.y) / 2)
+        return Point((self.start.p_x + self.end.p_x) / 2, (self.start.p_y + self.end.p_y) / 2)
     
     
     
@@ -113,8 +118,8 @@ class Polygon(Shape):
 
     @property
     def center(self) -> Point:
-        x = sum(vertex.x for vertex in self.vertices) / len(self.vertices)
-        y = sum(vertex.y for vertex in self.vertices) / len(self.vertices)
+        x = sum(vertex.p_x for vertex in self.vertices) / len(self.vertices)
+        y = sum(vertex.p_y for vertex in self.vertices) / len(self.vertices)
         return Point(x, y)
     
     @property
@@ -131,8 +136,8 @@ class Polygon(Shape):
         area: float = 0.0
         for i in range(len(self.vertices)):
             j = (i + 1) % len(self.vertices)
-            area += self.vertices[i].x * self.vertices[j].y
-            area -= self.vertices[j].x * self.vertices[i].y
+            area += self.vertices[i].p_x * self.vertices[j].p_y
+            area -= self.vertices[j].p_x * self.vertices[i].p_y
         return abs(area) / 2.0  
 
     @property
@@ -142,33 +147,34 @@ class Polygon(Shape):
             perimeter += edge.length
         return perimeter  
 
-@dataclass
+
 class Circle(Shape):
-    x: float
-    y: float
-    radius: float
+    def __init__(self, x: float, y: float, r: float):
+        self._x: float = x
+        self._y: float = y
+        self._r: float = r
 
     def __post_init__(self):
-        if self.radius <= 0:
+        if self._r <= 0:
             raise ValueError("Radius must be positive.")
 
     def __repr__(self):
-        return f"Circle(x={self.x}, y={self.y}, radius={self.radius})"
+        return f"Circle(x={self._x}, y={self._y}, radius={self._r})"
     
     def __eq__(self, value: object) -> bool:
         return super().__eq__(value)
     
     @property
     def perimeter(self) -> float:
-        return 2 * math.pi * self.radius
+        return 2 * math.pi * self._r
     
     @property
     def area(self) -> float:
-        return math.pi * self.radius ** 2
+        return math.pi * self._r ** 2
     
     @property
     def center(self) -> Point:
-        return Point(self.x, self.y)
+        return Point(self._x, self._y)
     
     @property
     def edges(self) -> tuple[Line, ...]:
@@ -178,33 +184,203 @@ class Circle(Shape):
         for i in range(num_edges):
             angle1 = (2 * math.pi / num_edges) * i
             angle2 = (2 * math.pi / num_edges) * (i + 1)
-            start = Point(self.x + self.radius * math.cos(angle1), self.y + self.radius * math.sin(angle1))
-            end = Point(self.x + self.radius * math.cos(angle2), self.y + self.radius * math.sin(angle2))
+            start = Point(self._x + self._r * math.cos(angle1), self._y + self._r * math.sin(angle1))
+            end = Point(self._x + self._r * math.cos(angle2), self._y + self._r * math.sin(angle2))
             edges.append(Line(start, end))
         return tuple(edges)
     
     @property
     def top(self):
-        return self.y - self.radius
+        return self._y - self._r
 
     @property
     def bottom(self):
-        return self.y + self.radius
+        return self._y + self._r
 
     @property
     def left(self):
-        return self.x - self.radius
+        return self._x - self._r
 
     @property
     def right(self):
-        return self.x + self.radius
+        return self._x + self._r
 
-@dataclass
+
 class Ball(Circle):
-    v_x: float
-    v_y: float
-    a_x: float
-    a_y: float
+    def __init__(self, *, x: float, y: float, v_x: float, v_y: float, a_x: float, a_y: float, radius: float):
+        super().__init__(x, y, radius)
+        self._v_x = v_x
+        self._v_y = v_y
+        self._a_x = a_x
+        self._a_y = a_y
+
+    def __repr__(self):
+        return f"Ball(x={self._x}, y={self._y}, v_x={self.v_x}, v_y={self.v_y}, a_x={self.a_x}, a_y={self.a_y}, radius={self._r})"
+    
+    @classmethod
+    def from_bearing(cls, *, x: float, y: float, v_m: float, v_d: float, a_m: float = 0.0, a_d: float = 0.0, radius: float = 1.0) -> Ball:
+        _v_x = v_m * math.cos(math.radians(v_d))
+        _v_y = v_m * math.sin(math.radians(v_d))
+        _a_x = a_m * math.cos(math.radians(a_d))
+        _a_y = a_m * math.sin(math.radians(a_d))
+        return cls(x=x, y=y, v_x=_v_x, v_y=_v_y, a_x=_a_x, a_y=_a_y, radius=radius)
+    
+    @property
+    def p_x(self) -> float:
+        return self._x
+    
+    @property
+    def p_y(self) -> float:
+        return self._y
+    
+    @property
+    def r(self) -> float:
+        return self._r
+    
+    @property
+    def v_x(self) -> float:
+        return self._v_x
+    
+    @property
+    def v_y(self) -> float:
+        return self._v_y
+    
+    @property
+    def v_m(self) -> float:
+        return (self._v_x**2 + self._v_y**2)**0.5
+    
+    @property
+    def v_d(self) -> float:
+        if self.v_x == 0 and self.v_y == 0:
+            return 0.0
+        if self.v_x == 0:
+            return 90.0 if self.v_y > 0 else 270.0
+        raw_deg: float = math.degrees(math.atan2(self.v_y, self.v_x))
+        return raw_deg + 360 if raw_deg < 0 else raw_deg
+    
+    @property
+    def a_x(self) -> float:
+        return self._a_x
+    
+    @property
+    def a_y(self) -> float:
+        return self._a_y
+    
+    @property
+    def a_m(self) -> float:
+        return (self._a_x**2 + self._a_y**2)**0.5
+    
+    @property
+    def a_d(self) -> float:
+        if self.a_x == 0 and self.a_y == 0:
+            return 0.0
+        if self.a_x == 0:
+            return 90.0 if self.a_y > 0 else 270.0
+        return math.degrees(math.atan2(self.a_y, self.a_x))
+    
+    @p_x.setter
+    def p_x(self, value: float):
+        self._x = value
+        if self.v_m == 0:
+            self._v_x = 0
+            self._v_y = 0
+        if self.a_m == 0:
+            self._a_x = 0
+            self._a_y = 0
+
+    @p_y.setter
+    def p_y(self, value: float):
+        self._y = value
+        if self.v_m == 0:
+            self._v_x = 0
+            self._v_y = 0
+        if self.a_m == 0:
+            self._a_x = 0
+            self._a_y = 0
+
+    @r.setter
+    def r(self, value: float):
+        if value <= 0:
+            raise ValueError("Radius must be positive.")
+        self._r = value
+        if self.v_m == 0:
+            self._v_x = 0
+            self._v_y = 0
+        if self.a_m == 0:
+            self._a_x = 0
+            self._a_y = 0
+
+    @v_x.setter
+    def v_x(self, value: float):
+        self._v_x = value
+        if self.v_m == 0:
+            self._v_y = 0
+
+    @v_y.setter
+    def v_y(self, value: float):
+        self._v_y = value
+        if self.v_m == 0:
+            self._v_x = 0
+    
+    @v_m.setter
+    def v_m(self, value: float):
+        if value < 0:
+            raise ValueError("Speed must be non-negative.")
+        if self.v_m == 0:
+            self._v_x = 0
+            self._v_y = 0
+        else:
+            ratio = value / self.v_m
+            self._v_x *= ratio
+            self._v_y *= ratio
+
+    @v_d.setter
+    def v_d(self, value: float):
+        if self.v_m == 0:
+            return
+        if value < 0:
+            value = (value % 360) + 360
+        if value > 360:
+            value = (value % 360)
+        rad = math.radians(value)
+        self._v_x = self.v_m * math.cos(rad)
+        self._v_y = self.v_m * math.sin(rad)
+
+    @a_x.setter
+    def a_x(self, value: float):
+        self._a_x = value
+        if self.a_m == 0:
+            self._a_y = 0
+
+    @a_y.setter
+    def a_y(self, value: float):
+        self._a_y = value
+        if self.a_m == 0:
+            self._a_x = 0
+
+    @a_m.setter
+    def a_m(self, value: float):
+        if value < 0:
+            raise ValueError("Acceleration must be non-negative.")
+        if self.a_m == 0:
+            self._a_x = 0
+            self._a_y = 0
+        else:
+            ratio = value / self.a_m
+            self._a_x *= ratio
+            self._a_y *= ratio
+
+    @a_d.setter
+    def a_d(self, value: float):
+        if self.a_m == 0:
+            return
+        if value < 0:
+            value = (value % 360) + 360
+        if value > 360:
+            value = (value % 360)
+        rad = math.radians(value)
+        self._a_x = self.a_m * math.cos(rad)
+        self._a_y = self.a_m * math.sin(rad)
 
 
 class Rectangle(Shape):
