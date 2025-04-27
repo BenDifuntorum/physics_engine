@@ -83,16 +83,16 @@ class Line:
     def slope(self) -> float:
         """Returns the slope of the line"""
         if self.end.x - self.start.x == 0:
-            return float('inf')  # vertical line
+            return float('inf')  if self.end.y > self.start.y else float('-inf')
         return (self.end.y - self.start.y) / (self.end.x - self.start.x)
     
     @property
     def angle(self) -> float:
         """Returns the angle of the line against the positive x-axis"""
         if self.end.x - self.start.x == 0:
-            return math.pi / 2
-        return math.atan2(self.end.y - self.start.y, self.end.x - self.start.x)
-        
+            return math.degrees(math.pi / 2) if self.end.y > self.start.y else math.degrees(3*math.pi / 2)
+        raw_deg: float = math.degrees(math.atan2(self.end.y - self.start.y, self.end.x - self.start.x))
+        return raw_deg + 360 if raw_deg < 0 else raw_deg
     @property
     def midpoint(self) -> Point:
         """Returns the midpoint of the line"""
@@ -246,35 +246,35 @@ class Rectangle(Shape):
         )
 
 class SurfaceType(Enum):
-    LEFT = auto()
-    RIGHT = auto()
-    TOP = auto()
-    BOTTOM = auto()
+    OUT = auto()
+    IN = auto()
+    DOUBLE = auto()
+
 
 
 class Surface(Line):
-    def __init__(self, *, start: Point, end: Point, surface_types: tuple[SurfaceType, ...], bounce_constant: float = 1.0, friction: float = 1.0):
+    def __init__(self, *, start: Point, end: Point, surface_type: SurfaceType, bounce_constant: float = 1.0, friction: float = 1.0):
         super().__init__(start, end)
-        self.surface_types: tuple[SurfaceType, ...] = surface_types
+        self.surface_type: SurfaceType = surface_type
         self.bounce_constant: float = bounce_constant
         self.friction: float = friction
 
     def __repr__(self):
         if self.bounce_constant == 1.0 and self.friction == 1.0:
-            return f"Surface(start={self.start}, end={self.end}, surface_types={self.surface_types})"
+            return f"Surface(start={self.start}, end={self.end}, surface_type={self.surface_type})"
         
         elif self.bounce_constant == 1.0:
-            return f"Surface(start={self.start}, end={self.end}, surface_types={self.surface_types}, friction={self.friction})"
+            return f"Surface(start={self.start}, end={self.end}, surface_type={self.surface_type}, friction={self.friction})"
         
         elif self.friction == 1.0:
-            return f"Surface(start={self.start}, end={self.end}, surface_types={self.surface_types}, bounce_constant={self.bounce_constant})"
+            return f"Surface(start={self.start}, end={self.end}, surface_type={self.surface_type}, bounce_constant={self.bounce_constant})"
         
         else:
-            return f"Surface(start={self.start}, end={self.end}, surface_types={self.surface_types}, bounce_constant={self.bounce_constant}, friction={self.friction})"
+            return f"Surface(start={self.start}, end={self.end}, surface_type={self.surface_type}, bounce_constant={self.bounce_constant}, friction={self.friction})"
 
     @classmethod
-    def from_line(cls, *, line: Line, surface_types: tuple[SurfaceType, ...], bounce_constant: float = 1.0, friction: float = 1.0) -> Surface:
-        return cls(start=line.start, end=line.end, surface_types=surface_types, bounce_constant=bounce_constant, friction=friction)
+    def from_line(cls, *, line: Line, surface_type: SurfaceType, bounce_constant: float = 1.0, friction: float = 1.0) -> Surface:
+        return cls(start=line.start, end=line.end, surface_type=surface_type, bounce_constant=bounce_constant, friction=friction)
 
         
     

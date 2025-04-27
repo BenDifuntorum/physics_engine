@@ -20,10 +20,10 @@ class PhysicsModel:
         self._bounce_factor_y = _Constants.BOUNCE_FACTOR_Y
         self._frictional_constant = _Constants.FRICTIONAL_CONSTANT ** (1/fps)
         self._surfaces = [
-            Surface(start=Point(0, 0), end=Point(0, height), surface_types=(SurfaceType.LEFT,)),
-            Surface(start=Point(0, 0), end=Point(width, 0), surface_types=(SurfaceType.TOP,)),
-            Surface(start=Point(width, 0), end=Point(width, height), surface_types=(SurfaceType.RIGHT,)),
-            Surface(start=Point(0, height), end=Point(width, height), surface_types=(SurfaceType.BOTTOM,))
+            Surface(start=Point(0, 0), end=Point(width, 0), surface_type=SurfaceType.IN),
+            Surface(start=Point(width, 0), end=Point(width, height), surface_type=SurfaceType.IN),
+            Surface(start=Point(width, height), end=Point(0, height), surface_type=SurfaceType.IN),
+            Surface(start=Point(0, height), end=Point(0, 0), surface_type=SurfaceType.IN)
             ]
         
         self._width = width
@@ -41,28 +41,32 @@ class PhysicsModel:
         return self._ball
 
     @property
-    def closest_surface(self) -> SurfaceType:
-        dist = self.ball_dist_from_next_surface
-        
-        if dist == self._ball.left-0:
-            return SurfaceType.LEFT
+    def ball_dist_from_every_surface(self):
+        distances: list[float] = []
+        for surface in self._surfaces:
+            x1, x2, y1, y2 = surface.start.x, surface.end.x, surface.start.y, surface.end.y
+            x3, y3 = self._ball.x, self._ball.y
+            
+            determinant: float = (y2 - y1)*x3 - (x2 - x1)*y3 + ((x2*y1) - (y2*x1))
+            length: float = ((y2 - y1)**2 + (x2 - x1)**2) ** 0.5
+            dist = determinant / length
+            distances.append(dist)
 
-        elif dist == self._width-self._ball.right:
-            return SurfaceType.RIGHT
-
-        elif dist == self._ball.top-0:
-            return SurfaceType.TOP
-
-        else:
-            assert dist == self._height-self._ball.bottom
-            return SurfaceType.BOTTOM
+        return distances
 
     @property
-    def ball_dist_from_next_top(self):
-        tops: list[Surface] = [s for s in self._surfaces if s.surface_types == SurfaceType.TOP]
-        distance_top = self._ball.top - 
+    def ball_dist_from_next_surface(self) -> float:
+        distances = self.ball_dist_from_every_surface
+        dist = min(distances)
+        return dist
+    
 
-
+    @property
+    def closest_surface(self) -> Surface:
+        dist = self.ball_dist_from_next_surface
+        distances = self.ball_dist_from_every_surface
+        return self._surfaces[distances.index(dist)]
+        
     # @property
     # def ball_dist_from_next_surface_x(self):
     #     return min(
@@ -98,32 +102,34 @@ class PhysicsModel:
             )
         
     def _conf_adjust(self):
-        if self.ball_dist_from_next_surface_y < abs(self._ball.v_y) or self.ball_dist_from_next_surface_x < abs(self._ball.v_x):
-            self._adjust()
+        pass
+        # if self.ball_dist_from_next_surface < abs(self._ball.v_y) or self.ball_dist_from_next_surface < abs(self._ball.v_x):
+        #     self._adjust()
 
     def _adjust(self):
-        match self.closest_surface:
-            case SurfaceType.LEFT:
-                self._ball.x = self._ball.radius 
+        pass
+        # match self.closest_surface:
+        #     case SurfaceType.LEFT:
+        #         self._ball.x = self._ball.radius 
 
-            case SurfaceType.RIGHT:
-                self._ball.x = self._width - self._ball.radius 
+        #     case SurfaceType.RIGHT:
+        #         self._ball.x = self._width - self._ball.radius 
 
-            case SurfaceType.TOP:
-                self._ball.y = self._ball.radius 
+        #     case SurfaceType.TOP:
+        #         self._ball.y = self._ball.radius 
 
-            case SurfaceType.BOTTOM:
-                self._ball.y = self._height - self._ball.radius 
+        #     case SurfaceType.BOTTOM:
+        #         self._ball.y = self._height - self._ball.radius 
     
-        if abs(self._ball.v_x) < 0.000001:
-            self._ball.v_x = 0
-        if abs(self._ball.v_y) < 0.000001:
-            self._ball.v_y = 0
+        # if abs(self._ball.v_x) < 0.000001:
+        #     self._ball.v_x = 0
+        # if abs(self._ball.v_y) < 0.000001:
+        #     self._ball.v_y = 0
 
 
     def height_update(self):
-        if self.ball_dist_from_next_surface < 0:
-            self._bounce()
+        # if self.ball_dist_from_next_surface < 0:
+        #     self._bounce()
         self._accelerate_x()
         self._accelerate_y()
         self._move_x()
@@ -135,19 +141,19 @@ class PhysicsModel:
     def _move_y(self):
         self._ball.y += self._ball.v_y
 
-    def _bounce_x(self, bounce_factor: float = 0):
-        if bounce_factor == 0:
-            bounce_factor = self._bounce_factor_x
+    # def _bounce_x(self, bounce_factor: float = 0):
+    #     if bounce_factor == 0:
+    #         bounce_factor = self._bounce_factor_x
 
-        self._ball.v_x *= -bounce_factor
-        self._ball.v_y *= self._frictional_constant
+    #     self._ball.v_x *= -bounce_factor
+    #     self._ball.v_y *= self._frictional_constant
 
-    def _bounce_y(self, bounce_factor: float = 0):
-        if bounce_factor == 0:
-            bounce_factor = self._bounce_factor_y
+    # def _bounce_y(self, bounce_factor: float = 0):
+    #     if bounce_factor == 0:
+    #         bounce_factor = self._bounce_factor_y
 
-        self._ball.v_y *= -bounce_factor
-        self._ball.v_x *= self._frictional_constant
+    #     self._ball.v_y *= -bounce_factor
+    #     self._ball.v_x *= self._frictional_constant
 
     def _accelerate_x(self):
         self._ball.v_x += self._ball.a_x
@@ -158,15 +164,12 @@ class PhysicsModel:
     def accelerate_to_gravity(self):
         self._ball.a_y = self._gravity
 
-    def _bounce(self):
-        if self.closest_surface in (SurfaceType.TOP, SurfaceType.BOTTOM):
-            self._bounce_y()
+    # def _bounce(self):
+    #     if self.ball_dist_from_next_surface < (self._ball.v_x**2 + self._ball.v_y**2)**0.5:
+    #         self._bounce()
         
-        else:
-            assert self.closest_surface in (SurfaceType.LEFT, SurfaceType.RIGHT)
-            self._bounce_x()
         
-        self._conf_adjust()
+    #     self._conf_adjust()
 
 
     def jump(self):
@@ -181,3 +184,11 @@ class PhysicsModel:
     def push_left(self):
         if self._ball.v_x > -_Constants.SPEED_LIMIT_X/self._fps:
             self._ball.v_x -= _Constants.SIDEWARD_PUSH_ACCELERATION/(self._fps**2)
+
+    def push_down(self):
+        if self._ball.v_y < _Constants.SPEED_LIMIT_X/self._fps:
+            self._ball.v_y += _Constants.SIDEWARD_PUSH_ACCELERATION/(self._fps**2)
+
+    def push_up(self):
+        if self._ball.v_y > -_Constants.SPEED_LIMIT_X/self._fps:
+            self._ball.v_y -= _Constants.SIDEWARD_PUSH_ACCELERATION/(self._fps**2)

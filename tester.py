@@ -16,7 +16,7 @@ class TesterModel(PhysicsModel):
             raise ValueError('Override this method!')
         self._ball = Ball(
             x=self._width//2, 
-            y=self._height, 
+            y=self._height//2, 
             v_x=0, 
             v_y=0, 
             a_x=0, 
@@ -63,12 +63,8 @@ class Controller:
         self._model.height_update()
         
         if pyxel.btnp(pyxel.KEY_SPACE):
-            # print(f"Before jump: v_y = {self._model.ball.v_y}")  # Debugging
             self._model.jump()
-            # print(f"After jump: v_y = {self._model.ball.v_y}")  # Debugging   
-            # print(f'Gravity: {self._model._gravity}')
             
-            # self._frame = 0
 
         if pyxel.btn(pyxel.KEY_D):
             self._model.push_right()
@@ -76,6 +72,21 @@ class Controller:
         if pyxel.btn(pyxel.KEY_A):
             self._model.push_left()
         
+        if pyxel.btn(pyxel.KEY_S):
+            self._model.push_down()
+
+        if pyxel.btn(pyxel.KEY_W):
+            self._model.push_up()
+    
+        if pyxel.btnp(pyxel.KEY_P):
+            print(self._model.closest_surface)
+
+        if pyxel.btnp(pyxel.KEY_H):
+            print(self._model.ball_dist_from_every_surface)
+
+
+
+
         # if self._frame <= 10:
         #     print(f'v_y after {self._frame} frames: {self._model.ball.v_y}')
         
@@ -83,10 +94,10 @@ class Controller:
         #     print()
         
         
-        if self._frame % (self._model.fps // 2) == 0:
-            self._count += 1
-            print(f'Frame {self._count}:')
-            print(f'x={self._model.ball.x}, y={self._model.ball.y}\nx_v={self._model.ball.v_x}, y_v={self._model.ball.v_y}\nx_a={self._model.ball.a_x}, y_a={self._model.ball.a_y}')
+        # if self._frame % (self._model.fps // 2) == 0:
+        #     self._count += 1
+        #     print(f'Frame {self._count}:')
+        #     print(f'x={self._model.ball.x}, y={self._model.ball.y}\nx_v={self._model.ball.v_x}, y_v={self._model.ball.v_y}\nx_a={self._model.ball.a_x}, y_a={self._model.ball.a_y}')
 
 
     def draw(self):
@@ -104,8 +115,8 @@ def init(fps: int, width: int, height: int):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Physics Engine Tester')
     parser.add_argument('--fps', type=int, default=60, help='Frames per second')
-    parser.add_argument('--width', type=int, default=450, help='Width of the window')
-    parser.add_argument('--height', type=int, default=450, help='Height of the window')
+    parser.add_argument('--width', type=int, default=900, help='Width of the window')
+    parser.add_argument('--height', type=int, default=900, help='Height of the window')
     args = parser.parse_args()
     init(args.fps, args.width, args.height)
 
