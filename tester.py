@@ -1,5 +1,6 @@
-import pyxel
+
 from physics import PhysicsModel, Ball
+import pyxel
 import argparse
 
 from physics_types import Surface

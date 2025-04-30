@@ -1,4 +1,8 @@
-from physics_types import Ball, Surface, Point, SurfaceType
+try:
+    from physics_types import Ball, Surface, Point, SurfaceType
+except ImportError:
+    from physics_engine.physics_types import Ball, Surface, Point, SurfaceType
+
 from dataclasses import dataclass
 
 import math

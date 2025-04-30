@@ -130,14 +130,6 @@ class Vect(Line):
     def direction(self) -> float:
         return self._direction
     
-    @property
-    def normal(self) -> Vect:
-        """Returns the normal vector of the line"""
-        dx = self.end.p_x - self.start.p_x
-        dy = self.end.p_y - self.start.p_y
-        length = math.sqrt(dx ** 2 + dy ** 2)
-        return Vect(-dy / length, dx / length)
-    
     
 class Polygon(Shape):
     """A polygon is defined by its vertices. The vertices must be provided in order (clockwise or counter-clockwise)."""
