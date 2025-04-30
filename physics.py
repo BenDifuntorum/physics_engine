@@ -1,7 +1,7 @@
 from physics_types import Ball, Surface, Point, SurfaceType
 from dataclasses import dataclass
 
-import pyxel
+import math
 
 @dataclass
 class _Constants:
@@ -10,7 +10,7 @@ class _Constants:
     BOUNCE_FACTOR_X = 1
     BOUNCE_FACTOR_Y = 1
     FRICTIONAL_CONSTANT = 1
-    SPEED_LIMIT_X = 540
+    SPEED_LIMIT_X = 2000
     JUMP_HEIGHT = 1100
     SIDEWARD_PUSH_ACCELERATION = 2100
 
@@ -26,7 +26,8 @@ class PhysicsModel:
             Surface(start=Point(width, 0), end=Point(width, height), surface_type=SurfaceType.IN),
             Surface(start=Point(width, height), end=Point(0, height), surface_type=SurfaceType.IN),
             Surface(start=Point(0, height), end=Point(0, 0), surface_type=SurfaceType.IN),
-            Surface(start=Point(100, 400), end=Point(400, 100), surface_type=SurfaceType.DOUBLE),
+            # Surface(start=Point(100, 400), end=Point(400, 100), surface_type=SurfaceType.DOUBLE),
+            # Surface(start=Point(400, 200), end=Point(200, 300), surface_type=SurfaceType.OUT),
             ]
         
         self._width = width
@@ -65,7 +66,7 @@ class PhysicsModel:
 
                 case SurfaceType.DOUBLE:
                     dist = abs(determinant / length)
-                    
+       
             distances.append(dist)
 
         return distances
@@ -82,12 +83,76 @@ class PhysicsModel:
         dist = self.ball_dist_from_next_surface
         distances = self.ball_dist_from_every_surface
         return self._surfaces[distances.index(dist)]
+
+
+    def _surface_details(self) -> tuple[float, float, float, float]:
+        x1, x2, y1, y2 = (
+            self.closest_surface.start.p_x, 
+            self.closest_surface.end.p_x, 
+            self.closest_surface.start.p_y, 
+            self.closest_surface.end.p_y)
         
+        return x1, y1, x2, y2
+    
+    @staticmethod
+    def unit_vector(a: float):
+        dir_x, dir_y = (
+            math.cos(math.radians(a)),
+            -math.sin(math.radians(a))
+        )
+        return dir_x, dir_y
+    
+    def ray_intersection(self):
+        dir_x, dir_y = self.unit_vector(self._ball.v_d)
+        
+        x3, y3 = self._ball.p_x, self._ball.p_y
+        x4, y4 = self._ball.p_x + dir_x, self._ball.p_y + dir_y
+
+        t, u = self.raycast(*self._surface_details(), x3, y3, x4, y4)
+        intersection = (x3 + u * dir_x, y3 + u * dir_y)
+        
+        del(t)
+        print(intersection)
+
+    @staticmethod
+    def raycast(x1: float, y1: float, 
+                x2: float, y2: float, 
+                x3: float, y3: float, 
+                x4: float, y4: float) -> tuple[float, float]:
+        
+        denom = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
+        if denom == 0:
+            return (float('inf'), float('inf'))
+        
+        else:
+            t: float = ((x1 - x3)*(y3 - y4) - (y1 - y3)*(x3 - x4)) / denom
+            u: float = -((x1 - x2)*(y1 - y3) - (y1 - y2)*(x1 - x3)) / denom
+            print(t, u)
+            return (t, u)
+    
+
+    def check_bounce(self):
+        # Check if the ball is going to bounce off the surface
+        dir_x, dir_y = self.unit_vector(self._ball.v_d)
+
+        x3, y3 = self._ball.p_x, self._ball.p_y
+        x4, y4 = self._ball.p_x + dir_x, self._ball.p_y + dir_y
+        
+        t, u = self.raycast(*self._surface_details(), x3, y3, x4, y4)
+        if t == float('inf') or u == float('inf'):
+            pass
+        else:
+            max_distance = self._ball.v_m
+            epsilon = 1e-2
+            if epsilon <= t <= 1 - epsilon and 0 <= u <= max_distance:
+                self.bounce()
+            else:
+                pass
+
     def bounce(self):
         # The ball is going to bounce
         # Get the normal vector of the surface
         x1, x2, y1, y2 = self.closest_surface.start.p_x, self.closest_surface.end.p_x, self.closest_surface.start.p_y, self.closest_surface.end.p_y
-        x3, y3 = self._ball.p_x, self._ball.p_y
         
         # Calculate the normal vector
         dx = x2 - x1
@@ -102,27 +167,6 @@ class PhysicsModel:
         # Reflect the velocity vector off the surface
         self._ball.v_x -= 2 * dot_product * nx * self._bounce_factor_x
         self._ball.v_y -= 2 * dot_product * ny * self._bounce_factor_y
-
-    def check_bounce(self):
-        v_m = self._ball.v_m
-        dist = self.ball_dist_from_next_surface
-        
-        fdist = dist - v_m
-        
-        start_px = self.closest_surface.start.p_x
-        end_px = self.closest_surface.end.p_x
-        start_py = self.closest_surface.start.p_y
-        end_py = self.closest_surface.end.p_y
-
-        print(f'v_m: {v_m}, dist: {dist}')
-        
-        if dist * fdist < 0 and (
-            min(start_px, end_px) < (self._ball.p_x + self._ball.v_x) < max(start_px, end_px) or
-            min(start_py, end_py) < (self._ball.p_y + self._ball.v_y) < max(start_py, end_py)
-            ):
-            # The ball is going to bounce
-            self.bounce()
-
 
     def _init_ball(self):
         '''For testing purposes, the ball is initialized at the center of the screen.
@@ -183,4 +227,3 @@ class PhysicsModel:
     def push_up(self):
         if self._ball.v_y > -_Constants.SPEED_LIMIT_X/self._fps:
             self._ball.v_y -=_Constants.SIDEWARD_PUSH_ACCELERATION/(self._fps**2)
-

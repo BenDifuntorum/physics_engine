@@ -4,6 +4,14 @@ from abc import ABC, abstractmethod
 import math
 
 
+def rad_to_deg(radians: float) -> float:
+    """Convert radians to degrees."""
+    return radians * (180 / math.pi)
+
+def deg_to_rad(degrees: float) -> float:
+    """Convert degrees to radians."""
+    return degrees * (math.pi / 180)
+
 class Shape(ABC):
     """Abstract base class for all shapes."""
     def __repr__(self):
@@ -97,6 +105,38 @@ class Line:
         """Returns the midpoint of the line"""
         return Point((self.start.p_x + self.end.p_x) / 2, (self.start.p_y + self.end.p_y) / 2)
     
+class Ray(Line):
+    """A ray is a line that starts at a point and extends infinitely in one direction."""
+    def __init__(self, start: Point, end: Point):
+        super().__init__(start, end)
+        self._direction = self.angle
+    
+    @property
+    def direction(self) -> float:
+        return self._direction
+
+class Vect(Line):
+    """A vector is a line with a direction and magnitude."""
+    def __init__(self, start: Point, end: Point):
+        super().__init__(start, end)
+        self._magnitude = self.length
+        self._direction = self.angle
+    
+    @property
+    def magnitude(self) -> float:
+        return self._magnitude
+    
+    @property
+    def direction(self) -> float:
+        return self._direction
+    
+    @property
+    def normal(self) -> Vect:
+        """Returns the normal vector of the line"""
+        dx = self.end.p_x - self.start.p_x
+        dy = self.end.p_y - self.start.p_y
+        length = math.sqrt(dx ** 2 + dy ** 2)
+        return Vect(-dy / length, dx / length)
     
     
 class Polygon(Shape):
@@ -217,8 +257,8 @@ class Ball(Circle):
         return f"Ball(x={self.p_x}, y={self.p_y}, v_x={self.v_x}, v_y={self.v_y}, a_x={self.a_x}, a_y={self.a_y}, radius={self.r})"
     
     @classmethod
-    def from_bearing(cls, *, p_x: float, p_y: float, v_m: float, v_d: float, a_m: float = 0.0, a_d: float = 0.0, radius: float = 1.0) -> Ball:
-        if radius <= 0:
+    def from_bearing(cls, *, p_x: float, p_y: float, v_m: float, v_d: float, a_m: float = 0.0, a_d: float = 0.0, r: float = 1.0) -> Ball:
+        if r <= 0:
             raise ValueError("Radius must be positive.")
         
         if  v_m < 0 or a_m < 0:
@@ -231,11 +271,11 @@ class Ball(Circle):
         # _p_x = p_m * math.cos(math.radians(p_d))
         # _p_y = p_m * math.sin(math.radians(p_d))        
         _v_x = v_m * math.cos(math.radians(v_d))
-        _v_y = v_m * math.sin(math.radians(v_d))
+        _v_y = v_m * -math.sin(math.radians(v_d))
         _a_x = a_m * math.cos(math.radians(a_d))
-        _a_y = a_m * math.sin(math.radians(a_d))
+        _a_y = a_m * -math.sin(math.radians(a_d))
 
-        return cls(p_x=p_x, p_y=p_y, v_x=_v_x, v_y=_v_y, a_x=_a_x, a_y=_a_y, r=radius)
+        return cls(p_x=p_x, p_y=p_y, v_x=_v_x, v_y=_v_y, a_x=_a_x, a_y=_a_y, r=r)
     
     @property
     def r(self) -> float:
@@ -258,9 +298,8 @@ class Ball(Circle):
     #     if self.p_x == 0 and self.p_y == 0:
     #         return 0.0
     #     if self.p_x == 0:
-    #         return 90.0 if self.p_y > 0 else 270.0
-    #     raw_deg: float = math.degrees(math.atan2(self.p_y, self.p_x))
-    #     return raw_deg + 360 if raw_deg < 0 else raw_deg
+    #         return 270 if self.p_y > 0 else 90
+    #     raw_deg: float = math.degrees(-math.atan2(self.p_y, self.p_x))
     
     @property
     def v_x(self) -> float:
@@ -279,10 +318,10 @@ class Ball(Circle):
         if self.v_x == 0 and self.v_y == 0:
             return 0.0
         if self.v_x == 0:
-            return 90.0 if self.v_y > 0 else 270.0
-        raw_deg: float = math.degrees(math.atan2(self.v_y, self.v_x))
+            return 270 if self.v_y > 0 else 90
+        raw_deg: float = math.degrees(math.atan2(-self.v_y, self.v_x))
         return raw_deg + 360 if raw_deg < 0 else raw_deg
-    
+
     @property
     def a_x(self) -> float:
         return self._a_x
@@ -300,8 +339,10 @@ class Ball(Circle):
         if self.a_x == 0 and self.a_y == 0:
             return 0.0
         if self.a_x == 0:
-            return 90.0 if self.a_y > 0 else 270.0
-        return math.degrees(math.atan2(self.a_y, self.a_x))
+            return 270 if self.a_y > 0 else 90
+        raw_deg: float = math.degrees(math.atan2(-self.a_y, self.a_x))
+        return raw_deg + 360 if raw_deg < 0 else raw_deg
+
     
     @p_x.setter
     def p_x(self, value: float):

@@ -12,13 +12,13 @@ class TesterModel(PhysicsModel):
         pyxel.init(width, height, fps=fps, title='PHYSICS ENGINE TESTER', quit_key=pyxel.KEY_Q)
 
     def _init_ball(self):
-        self._ball = Ball(
+        self._ball = Ball.from_bearing(
             p_x=self._width//2, 
             p_y=self._height//2, 
-            v_x=0, 
-            v_y=0, 
-            a_x=0, 
-            a_y=0,
+            v_m=0, 
+            v_d=0, 
+            a_m=0, 
+            a_d=0,
             r=5, 
             )
         
