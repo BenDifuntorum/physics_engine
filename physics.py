@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import math
 
+
 @dataclass
 class _Constants:
     """Constants for the physics model. Calculated against the fps of the game."""
@@ -30,8 +31,6 @@ class PhysicsModel:
             Surface(start=Point(width, 0), end=Point(width, height), surface_type=SurfaceType.IN),
             Surface(start=Point(width, height), end=Point(0, height), surface_type=SurfaceType.IN),
             Surface(start=Point(0, height), end=Point(0, 0), surface_type=SurfaceType.IN),
-            # Surface(start=Point(100, 400), end=Point(400, 100), surface_type=SurfaceType.DOUBLE),
-            # Surface(start=Point(400, 200), end=Point(200, 300), surface_type=SurfaceType.OUT),
             ]
         
         self._width = width
