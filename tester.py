@@ -85,22 +85,6 @@ class Controller:
 
         
 
-
-
-
-        # if self._frame <= 10:
-        #     print(f'v_y after {self._frame} frames: {self._model.ball.v_y}')
-        
-        # if self._frame == 11:
-        #     print()
-        
-        
-        # if self._frame % (self._model.fps // 2) == 0:
-        #     self._count += 1
-        #     print(f'Frame {self._count}:')
-        #     print(f'x={self._model.ball.x}, y={self._model.ball.y}\nx_v={self._model.ball.v_x}, y_v={self._model.ball.v_y}\nx_a={self._model.ball.a_x}, y_a={self._model.ball.a_y}')
-
-
     def draw(self):
         self._view.show_screen(self._model.ball, self._model.surfaces)
 
