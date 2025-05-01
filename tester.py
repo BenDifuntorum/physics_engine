@@ -29,7 +29,7 @@ class View:
     
     def sample_bounce(self, circle: Ball):
         pyxel.cls(col=pyxel.COLOR_BLACK)
-        pyxel.circ(x=circle.x, y=circle.y, r=circle.radius, col=pyxel.COLOR_WHITE)
+        pyxel.circ(x=circle.p_x, y=circle.p_y, r=circle.r, col=pyxel.COLOR_WHITE)
 
 
 class Controller:
@@ -71,7 +71,7 @@ class Controller:
         if self._frame % (self._model.fps // 2) == 0:
             self._count += 1
             print(f'Frame {self._count}:')
-            print(f'x={self._model.ball.x}, y={self._model.ball.y}\nx_v={self._model.ball.v_x}, y_v={self._model.ball.v_y}\nx_a={self._model.ball.a_x}, y_a={self._model.ball.a_y}')
+            print(f'x={self._model.ball.p_x}, y={self._model.ball.p_y}\nx_v={self._model.ball.v_x}, y_v={self._model.ball.v_y}\nx_a={self._model.ball.a_x}, y_a={self._model.ball.a_y}')
 
 
     def draw(self):

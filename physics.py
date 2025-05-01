@@ -1,4 +1,7 @@
-from .physics_types import Ball, Surface
+try:
+    from physics_types import Ball, Surface
+except ImportError:
+    from physics_engine.physics_types import Ball, Surface
 from dataclasses import dataclass
 
 @dataclass
@@ -75,13 +78,13 @@ class PhysicsModel:
         if type(self) != PhysicsModel:
             raise ValueError('This method cannot be inherited')
         self._ball = Ball(
-            x=self._width//2, 
-            y=self._height, 
+            p_x=self._width//2, 
+            p_y=self._height, 
             v_x=0, 
             v_y=0, 
             a_x=0, 
             a_y=0,
-            radius=5, 
+            r=5, 
             )
         
     def _conf_adjust(self):
@@ -91,16 +94,16 @@ class PhysicsModel:
     def _adjust(self):
         match self.closest_surface:
             case Surface.LEFT:
-                self._ball.x = self._ball.radius 
+                self._ball.p_x = self._ball.r 
 
             case Surface.RIGHT:
-                self._ball.x = self._width - self._ball.radius 
+                self._ball.p_x = self._width - self._ball.r 
 
             case Surface.TOP:
-                self._ball.y = self._ball.radius 
+                self._ball.p_y = self._ball.r 
 
             case Surface.BOTTOM:
-                self._ball.y = self._height - self._ball.radius 
+                self._ball.p_y = self._height - self._ball.r 
     
         if abs(self._ball.v_x) < 0.000001:
             self._ball.v_x = 0
@@ -117,10 +120,10 @@ class PhysicsModel:
         self._move_y()
 
     def _move_x(self):
-        self._ball.x += self._ball.v_x
+        self._ball.p_x += self._ball.v_x
 
     def _move_y(self):
-        self._ball.y += self._ball.v_y
+        self._ball.p_y += self._ball.v_y
 
     def _bounce_x(self, bounce_factor: float = 0):
         if bounce_factor == 0:

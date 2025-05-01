@@ -4,25 +4,25 @@ from enum import Enum, auto
 
 @dataclass
 class Circle:
-    x: float
-    y: float
-    radius: float
+    p_x: float
+    p_y: float
+    r: float
 
     @property
     def top(self):
-        return self.y - self.radius
+        return self.p_y - self.r
 
     @property
     def bottom(self):
-        return self.y + self.radius
+        return self.p_y + self.r
 
     @property
     def left(self):
-        return self.x - self.radius
+        return self.p_x - self.r
 
     @property
     def right(self):
-        return self.x + self.radius
+        return self.p_x + self.r
 
 @dataclass
 class Ball(Circle):
