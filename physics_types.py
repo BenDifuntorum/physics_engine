@@ -1,46 +1,190 @@
 from __future__ import annotations
-from typing import Self
+from abc import ABC, abstractmethod
 import math
+from typing import get_type_hints
 
+class Validator:
+    def __init__(self, **kwargs: object):
+        self.__dict__.update(kwargs)  # Set the instance attributes dynamically
+        self._validate()
 
-class Normal:
-    def __init__(self, x: float, y: float) -> None:
-        if not math.isclose(math.hypot(x, y), 1):
-            self = physics_formula.vect_normal(x, y)
+    def _validate(self):
+        type_hints = get_type_hints(type(self))
+        for attr, expected_type in type_hints.items():
+            value = getattr(self, attr)
 
-        else:
-            self.x = x
-            self.y = y
+            if expected_type is float and isinstance(value, int):
+                setattr(self, attr, float(value))
+                continue
 
-    def __repr__(self) -> str:
-        return f'{type(self).__name__}(x={self.x}, y={self.y})'
-    
-    def __str__(self) -> str:
-        return f'At t interval, moves line {self.x}t through x and {self.y}t through y.'
+            if not isinstance(value, expected_type):
+                raise TypeError(f"Attribute '{attr}' must be of type {expected_type.__name__}, "
+                                 f"but got {type(value).__name__}")
 
-    def __abs__(self) -> Normal:
-        return Normal(self.x, abs(self.y))
-    
-    def __neg__(self) -> Normal:
-        return Normal(-self.x, -self.y)
+class AbstractPath(ABC, Validator):
+    _origin: Point
+    _vect: Vect
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, type(self)) and \
+        self._origin == other._origin and \
+        math.isclose(self._vect.x, other._vect.x) and \
+        math.isclose(self._vect.y, other._vect.y):
+            return True
+        return False
+
+    @property
+    def slope(self) -> float:
+        x1, y1 = self._origin.p_x, self._origin.p_y
+        next = self._origin.move_through_vect(self._vect)
+        x2, y2 = next.p_x, next.p_y
+
+        dy, dx = y2-y1, x2-x1
+        if math.isclose(dx, 0):
+            return math.inf if (dy/dx) >= 0 else -math.inf
+        
+        else: 
+            return dy/dx
+    @property
+    @abstractmethod
+    def origin(self) -> Point:
+        pass
     
     @property
-    def perpend(self) -> Normal:
-        return Normal(self.y, -self.x)
+    @abstractmethod
+    def vect(self) -> Vect:
+        return self._vect
     
+    @abstractmethod
+    def perpendicular(self) -> AbstractPath:
+        pass
+
+    @property
+    @abstractmethod
+    def length(self) -> float:
+        pass
+
+    @abstractmethod
+    def point_at_t(self, t: float) -> Point:
+        pass
     
+    def _det_path(self) -> tuple[float, float]:
+        match type(self).__name__:
+            case 'Line':
+                return (-math.inf, math.inf)
+            case 'Segment':
+                return (-1, 1)
+            case 'Ray':
+                return (-math.inf, 1)
+            case _:
+                return (0, 0)
+    
+    def intersects(self, other: AbstractPath | AbstractFigure) -> Line | tuple[Point, Point] | Point | None:
+        if isinstance(other, AbstractFigure):
+            return self._intersects_shape(other)
+        
+        else:
+            assert isinstance(other, AbstractPath)
+            return self._intersects_line(other)
             
+    def _intersects_line(self, other: AbstractPath) -> Point | None:
+        next_point = self._origin.move_through_vect(self._vect)
+        x1, y1 = self._origin.p_x, self._origin.p_y
+        x2, y2 = next_point.p_x, next_point.p_y
+
+        t1, t2 = self._intersects_helper(other)
+        ep = 1e-9
+        if t1 == math.inf or t2 == math.inf:
+            return None
+        
+        t1_min, t1_max = self._det_path()
+        
+        if t1_min-ep <= t1 <= t1_max+ep or t1_min-ep <= t2 <= t1_max+ep:
+            x_int = x1 + t1 * (x2 - x1)
+            y_int = y1 + t1 * (y2 - y1)
+            return Point(x_int, y_int)
+        
+        return None
+
+    def _intersects_shape(self, other: AbstractFigure) -> Point | None:
+        ...
+        # find out which line/s and then find the intersection/s
+
+    def _intersects_helper(self, other: AbstractPath) -> tuple[float, float]:
+        next_point = self._origin.move_through_vect(self._vect)
+        x1, y1 = self._origin.p_x, self._origin.p_y
+        x2, y2 = next_point.p_x, next_point.p_y
+
+        other_next_point = other._origin.move_through_vect(other._vect)
+        x3, y3 = other._origin.p_x, other._origin.p_y
+        x4, y4 = other_next_point.p_x, other_next_point.p_y
+
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+
+        if math.isclose(denom, 0):
+            return math.inf, math.inf
+        
+        
+        t1 = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+        t2 = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / denom
+
+        return t1, t2
     
-class Point:
-    def __init__(self, p_x: float, p_y: float) -> None:
+    
+
+
+class AbstractFigure(ABC, Validator):
+    ...
+
+
+
+
+class Movable(ABC, Validator):
+    @property
+    @abstractmethod
+    def v_x(self) -> float:
+        pass
+
+    @property
+    @abstractmethod
+    def v_y(self) -> float:
+        pass
+
+    @property
+    @abstractmethod
+    def a_x(self) -> float:
+        pass
+
+    @property
+    @abstractmethod
+    def a_y(self) -> float:
+        pass
+    
+
+
+
+class Tangible(ABC, Validator):
+    ...
+
+
+
+
+class Point(Validator):
+    p_x: float | int
+    p_y: float | int
+
+    def __init__(self, p_x: float | int, p_y: float | int) -> None:
         self.p_x = p_x
         self.p_y = p_y
+        super().__init__(p_x=p_x, p_y=p_y)
+
+    
 
     def __str__(self) -> str:
         return f'{type(self).__name__} at {repr(self.p_x)}, {repr(self.p_y)}'
     
     def __repr__(self) -> str:
-        return f'{type(self).__name__}(x={self.p_x}, y{self.p_y})'
+        return f'{type(self).__name__}(x={self.p_x}, y={self.p_y})'
     
     def __add__(self, other: Point) -> Point:
         new_p_x = self.p_x + other.p_x
@@ -57,13 +201,15 @@ class Point:
         new_p_y = self.p_y * other
         return Point(new_p_x, new_p_y)
     
-    def __div__(self, other: float) -> Point:
+    def __truediv__(self, other: float) -> Point:
         new_p_x = self.p_x / other
         new_p_y = self.p_y / other
         return Point(new_p_x, new_p_y)
     
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, Point) and self.p_x == other.p_x and self.p_y == other.p_y:
+        if isinstance(other, Point) and \
+            math.isclose(self.p_x, other.p_x) and \
+            math.isclose(self.p_x, other.p_y):
             return True
         else:
             return False
@@ -71,24 +217,79 @@ class Point:
     def __neg__(self) -> Point:
         return Point(-self.p_x, -self.p_y)
         
-    def move_through_normal(self, normal: Normal, *, t: float=1) -> Point:
-        new_p_x = self.p_x + (t*normal.x)
-        new_p_y = self.p_y + (t*normal.y)
+    def move_through_vect(self, vect: Vect, *, t: float=1) -> Point:
+        new_p_x = self.p_x + (t*vect.x)
+        new_p_y = self.p_y + (t*vect.y)
 
         return Point(new_p_x, new_p_y)
+    
 
 
 
-class Particle(Point):
+class Vect(Validator):
+    x: float | int
+    y: float | int
+
+    def __init__(self, x: float | int, y: float | int) -> None:
+        
+        if x == 0 and y == 0:
+            raise ValueError('Vect cannot be formed from 0 and 0')
+        
+        elif not math.isclose(math.hypot(x, y), 1):
+            x, y = physics_formula.vect_normal(x, y)
+        
+        else:
+            self.x = x
+            self.y = y
+
+        super().__init__(x=x, y=y)
+    @classmethod
+    def from_pair(cls, l: tuple[float, float]) -> Vect:
+        x, y = l
+        return cls(x, y)
+
+    def __repr__(self) -> str:
+        return f'{type(self).__name__}(x={self.x}, y={self.y})'
+    
+    def __str__(self) -> str:
+        return f'At t interval, moves line {self.x}t through x and {self.y}t through y.'
+
+    def __abs__(self) -> Vect:
+        return Vect(self.x, abs(self.y))
+    
+    def __neg__(self) -> Vect:
+        return Vect(-self.x, -self.y)
+    
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Vect) and math.isclose(self.x, other.x) and math.isclose(self.y, other.y):
+            return True
+        else: 
+            return False
+    
+    @property
+    def perpendicular(self) -> Vect:
+        return Vect(-self.y, self.x)
+      
+    @property
+    def antiperpendicular(self) -> Vect:
+        """Negative of the perpendicular"""
+        return Vect(self.y, -self.x)
+
+
+
+
+class Particle(Point, Tangible, Movable):
     def __init__(self, p_x: float, p_y: float, *, v_x: float, v_y: float, a_x: float, a_y: float) -> None:
         super().__init__(p_x, p_y)
+
         self._v_x = v_x
         self._v_y = v_y
         self._a_x = a_x
         self._a_y = a_y
 
+        super(Movable).__init__(v_x=v_x, v_y=v_y, a_x=a_x, a_y=a_y)
     @classmethod
-    def init_md(cls, p_x: float, p_y: float, *, v_m: float, v_d: Normal, a_m: float, a_d: Normal) -> Particle:
+    def init_md(cls, p_x: float, p_y: float, *, v_m: float, v_d: Vect, a_m: float, a_d: Vect) -> Particle:
         v_x, v_y = physics_formula.vect_split(v_m, v_d)
         a_x, a_y = physics_formula.vect_split(a_m, a_d)
         
@@ -99,98 +300,233 @@ class Particle(Point):
         return math.hypot(self._v_x, self._v_y)
 
     @property
-    def v_d(self) -> Normal:
-        return Normal(self._v_x, self._v_y)
+    def v_d(self) -> Vect:
+        return Vect(self._v_x, self._v_y)
     
 
-class Line:
-    def __init__(self, o: Point, d: Normal) -> None:
-        self.origin = o
-        self.direction = d
 
+
+class Line(AbstractPath):
+    def __init__(self, origin: Point, vect: Vect) -> None:
+        self._origin = origin
+        if vect.x < 0 and vect.y < 0:
+            vect = -vect
+        self._vect = vect
+
+        super().__init__(_origin=origin, _vect=vect)
+    
     def __repr__(self) -> str:
-        return f'{type(self).__name__}(origin={repr(self.origin)}, direction={repr(self.direction)})'
+        return f'{type(self).__name__}(origin={repr(self._origin)}, vect={repr(self._vect)})'
 
     def __str__(self) -> str:
-        return f'{type(self).__name__} starting on {repr(self.origin)} with normal vector {repr(self.direction)}'
+        return f'{type(self).__name__} starting on {repr(self._origin)} with vect {repr(self._vect)}'
 
-    @classmethod
-    def from_points(cls, *, start: Point, end: Point) -> Self:
+    def decomp(self, start: Point, end: Point) -> Vect:
         x1, y1 = start.p_x, start.p_y
         x2, y2 = end.p_x, end.p_y
 
-        d = physics_formula.vect_normal(y2-y1, x2-x1)
-        
-        return cls(start, d)
+        d = physics_formula.vect_normal(x2-x1, y2-y1)
 
+        return Vect.from_pair(d)
+    
+    @property
+    def origin(self) -> Point:
+        return self._origin
+    
+    @property
+    def vect(self) -> Vect:
+        return self._vect
+    
+    @property
+    def length(self) -> float:
+        return math.inf
+
+    def perpendicular(self, origin: Point | None = None) -> Line:
+        if not origin:
+            origin = self._origin
+        return Line(origin, self._vect.perpendicular)
+    
+    def point_at_t(self, t: float=1) -> Point:
+        return self._origin.move_through_vect(self._vect, t=t)
+
+
+
+class Segment(AbstractPath):
+    _end: Point
+
+    def __init__(self, origin: Point, end: Point) -> None:
+        self._origin = origin
+        self._end = end
+
+        
+        x1, y1 = self._origin.p_x, self._origin.p_y
+        x2, y2 = self._end.p_x, self._end.p_y
+        d = physics_formula.vect_normal(x2-x1, y2-y1)
+        self._vect = Vect.from_pair(d)
+    
+        super().__init__(_origin=origin, _end=end)
+
+    def __str__(self) -> str:
+        return f'{type(self).__name__} starting on {repr(self._origin)} and ending on {repr(self._end)}'
+
+    def __repr__(self) -> str:
+        return f'{type(self).__name__}(start={repr(self._origin)}, end={repr(self._end)})'
+    
+    def __eq__(self, other: object) -> bool:
+        if super().__eq__(other) and self._end == self._end:
+            return True
+        return False
 
     @property
-    def slope(self):
-        x1, y1 = self.origin.p_x, self.origin.p_y
-        next = self.origin.move_through_normal(self.direction)
-        x2, y2 = next.p_x, next.p_y
-
-        m = (y2-y1) / (x2-x1)
-        if math.isclose(x2-x1, 0):
-            return math.inf if m >= 0 else -math.inf
-        
-        else: 
-            return m
+    def origin(self) -> Point:
+        return self._origin
 
     @property
-    def perpendicular(self, point: Point | None = None) -> Line:
-        if not point:
-            point = self.origin
-        return Line(point, self.direction.perpend)
-
-
+    def vect(self) -> Vect:
+        return self._vect
+    
+    @property
+    def length(self) -> float:
+        return physics_formula.line_length(self._origin, self._end)
+    
+    @property
+    def midpoint(self) -> Point:
+        mid_y = (self._end.p_y + self._origin.p_y) / 2
+        mid_x = (self._end.p_x + self._origin.p_x) / 2
+        return Point(mid_x, mid_y)
+        
+    @property
+    def end(self) -> Point:
+        return self._end
+    
+    def perpendicular(self, origin: Point | None = None) -> Segment:
+        '''Default perpendicular.'''
+        if not origin:
+            origin = self.midpoint
+        new_vect = self.vect.perpendicular
+        origin = origin.move_through_vect(new_vect, t=-self.length/2)
+        end = origin.move_through_vect(new_vect, t=self.length/2)
+        return Segment(origin, end)
+    
+    def antiperpendicular(self, origin: Point | None = None) -> Segment:
+        '''Default antiperpendicular.'''
+        if not origin:
+            origin = self.midpoint
+        new_vect = -self.vect.perpendicular
+        start = origin.move_through_vect(new_vect, t=-self.length/2)
+        end = origin.move_through_vect(new_vect, t=self.length/2)
+        return Segment(start, end)
+        
     def point_at_t(self, t: float) -> Point:
-        return self.origin.move_through_normal(self.direction, t=t)
+        p = self._origin.move_through_vect(self._vect, t=t)
+
+        x_min = min(self._origin.p_x, self._end.p_x)
+        x_max = max(self._origin.p_x, self._end.p_x)
+        y_min = min(self._origin.p_y, self._end.p_y)
+        y_max = max(self._origin.p_y, self._end.p_y)
+
+        if not (x_min <= p.p_x <= x_max and y_min <= p.p_y <= y_max):
+            raise ValueError(f'No point at t={t}')
+        return p
+    
 
 
-class Segment(Line):
-    def __new__(cls, start: Point, end: Point) -> Self:
-        dx, dy = end.p_x - start.p_x, end.p_y - start.p_y
-        d = physics_formula.vect_normal(dy, dx)
-        return cls.__from_line_args(start, d)
+
+class Ray(AbstractPath):
+    def __init__(self, origin: Point, vect: Vect) -> None:
+        self._origin = origin
+        self._vect = vect
+        super().__init__(_origin=origin, _vect=vect)
+
+    def __str__(self) -> str:
+        return f'{type(self).__name__} starting on {repr(self._origin)} and headed to {repr(self._vect)}'
+
+    def __repr__(self) -> str:
+        return f'{type(self).__name__}(start={repr(self._origin)}, vect={repr(self._vect)})' 
 
     @classmethod
-    def from_vector(cls, *, o: Point, d: Normal) -> Self:
-        return cls.__from_line_args(o, d)
-
-    @classmethod
-    def __from_line_args(cls, o: Point, d: Normal) -> Self:
-        obj = cls.__new__(cls)
-        Line.__init__(obj, o, d)
-        return obj
-
+    def from_points(cls, origin: Point, end: Point) -> Ray:
+        x1, y1 = origin.p_x, origin.p_y
+        x2, y2 = end.p_x, end.p_y
+        vect = physics_formula.vect_normal(x2-x1, y2-y1)
+        return cls(origin, Vect.from_pair(vect))
 
     @property
-    def midpoint(self):
-        ...
+    def origin(self) -> Point:
+        return self._origin
 
-class Ray(Line):
-    ...
-
-class Vect(Ray):
-    ...
-
-class Angle:
-    ...        
+    @property
+    def vect(self) -> Vect:
+        return self._vect
+    
+    @property
+    def length(self) -> float:
+        return math.inf
+    
+    def perpendicular(self, origin: Point | None = None, t: float = 0) -> Ray:
+        '''Default perpendicular.'''
+        if not origin:
+            origin = self._origin
+        new_vect = self.vect.perpendicular
+        new_origin = origin.move_through_vect(new_vect, t=t)
+        return Ray(new_origin, new_vect)
+    
+    def antiperpendicular(self, origin: Point | None = None, t: float = 0) -> Ray:
+        '''Default antiperpendicular.'''
+        if not origin:
+            origin = self._origin
+        new_vect = -self.vect.perpendicular
+        new_origin = origin.move_through_vect(new_vect, t=t)
+        return Ray(new_origin, new_vect)
+        
+    def point_at_t(self, t: float) -> Point:
+        p = self._origin.move_through_vect(self._vect, t=t)
+        if t < 0:
+            raise ValueError(f'No point at t={t}')
+        return p
 
 
 class Shape:
     ...
+
+
+
+
 class Polygon(Shape):
     ...
+
+
+
+
 class Circle(Shape):
     ...
-class Rectangle(Shape):
+
+
+
+
+class Triangle(Polygon):
     ...
+
+
+
+
+class Rectangle(Polygon):
+    ...
+
+
 
 
 class Ball(Circle, Particle):
     ...
+
+
+
+
+class surface(Segment, Particle):
+    ...
+
+
+
 
 class physics_formula:
     
@@ -199,9 +535,9 @@ class physics_formula:
         ...
 
     @staticmethod
-    def vect_split(magnitude: float, normal: Normal) -> tuple[float, float]:
-        m_x = magnitude * normal.x
-        m_y = magnitude * normal.y
+    def vect_split(magnitude: float, vect: Vect) -> tuple[float, float]:
+        m_x = magnitude * vect.x
+        m_y = magnitude * vect.y
         return m_x, m_y
     
     @staticmethod
@@ -212,12 +548,12 @@ class physics_formula:
         return math.hypot(y2-y1, x2-x1)
     
     @staticmethod
-    def vect_normal(x: float, y: float) -> Normal:
+    def vect_normal(x: float, y: float) -> tuple[float, float]:
         length = math.hypot(x, y)
         new_x = x/length
         new_y = y/length
 
-        return Normal(new_x, new_y)
+        return new_x, new_y
     
     @staticmethod
     def to_rad(angle: float) -> float:
