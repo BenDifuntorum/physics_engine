@@ -79,15 +79,24 @@ class AbstractPath(ABC, Validator):
             case _:
                 return (0, 0)
     
-    def intersects(self, other: AbstractPath | AbstractFigure) -> Line | tuple[Point, Point] | Point | None:
+    def intersects(self, other: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point, Point] | Point | None:
         if isinstance(other, AbstractFigure):
             return self._intersects_shape(other)
         
         else:
             assert isinstance(other, AbstractPath)
             return self._intersects_line(other)
-            
-    def _intersects_line(self, other: AbstractPath) -> Point | None:
+        
+    
+    
+                
+
+    
+    def _intersects_line(self, other: AbstractPath) -> Point | AbstractPath | None:
+        if c := physics_formula.check_collinear(self, other):
+            return c
+        
+        
         next_point = self._origin.move_through_vect(self._vect)
         x1, y1 = self._origin.p_x, self._origin.p_y
         x2, y2 = next_point.p_x, next_point.p_y
@@ -312,6 +321,7 @@ class Line(AbstractPath):
         if vect.x < 0 and vect.y < 0:
             vect = -vect
         self._vect = vect
+        self._end = Point(math.inf, math.inf)
 
         super().__init__(_origin=origin, _vect=vect)
     
@@ -320,15 +330,7 @@ class Line(AbstractPath):
 
     def __str__(self) -> str:
         return f'{type(self).__name__} starting on {repr(self._origin)} with vect {repr(self._vect)}'
-
-    def decomp(self, start: Point, end: Point) -> Vect:
-        x1, y1 = start.p_x, start.p_y
-        x2, y2 = end.p_x, end.p_y
-
-        d = physics_formula.vect_normal(x2-x1, y2-y1)
-
-        return Vect.from_pair(d)
-    
+   
     @property
     def origin(self) -> Point:
         return self._origin
@@ -562,3 +564,55 @@ class physics_formula:
     @staticmethod
     def to_deg(angle: float) -> float:
         return -math.degrees(angle)
+    
+    @staticmethod
+    def check_collinear(a: AbstractPath, b: AbstractPath) -> AbstractPath | None:
+        if a.vect != b.vect:
+            return 
+        
+        if a.origin.p_x 
+            if isinstance(a, Segment) and isinstance(b, Segment):
+                a, b = physics_formula.compare_collinear_segments(a, b)
+                return Segment()
+
+            
+            elif isinstance(a, Segment) or isinstance(b, Segment):
+                return a if isinstance(a, Segment) else b
+            
+            elif isinstance(a, Ray) or isinstance(b, Ray):
+                return a if isinstance(a, Ray) else b
+
+            else:
+                return a
+            
+    @staticmethod
+    def compare_collinear_segments(a: Segment, b: Segment) -> tuple[point, point]:
+        x1, y1 = a.origin.p_x, a.origin.p_y
+        x2, y2 = a.end.p_x, a.end.p_y
+        x3, y3 = b.origin.p_x, b.origin.p_y
+        x4, y4 = b.end.p_x, b.end.p_y
+
+        new_origin_x = 
+
+        return 
+    
+    @staticmethod
+    def closer_to_zero(a: float, b: float) -> float:
+        if abs(a) < abs(b):
+            return a
+        else:
+            return b
+        
+    @staticmethod
+    def farther_from_zero(a: float, b: float) -> float:
+        if abs(a) > abs(b):
+            return a
+        else:
+            return b
+        
+    @staticmethod
+    def order_pair(a: float, b: float) -> tuple[float, float]:
+        if abs(a) < abs(b):
+            return a, b
+        else:
+            return b, a
