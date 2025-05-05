@@ -21,6 +21,9 @@ class Validator:
                 raise TypeError(f"Attribute '{attr}' must be of type {expected_type.__name__}, "
                                  f"but got {type(value).__name__}")
 
+
+
+
 class AbstractPath(ABC, Validator):
     _origin: Point
     _normal: Normal
@@ -53,7 +56,12 @@ class AbstractPath(ABC, Validator):
     @property
     @abstractmethod
     def normal(self) -> Normal:
-        return self._normal
+        pass
+    
+    @property
+    @abstractmethod
+    def end(self) -> Point:
+        pass
     
     @abstractmethod
     def perpendicular(self) -> AbstractPath:
@@ -94,16 +102,19 @@ class AbstractPath(ABC, Validator):
         if c := physics_formula.check_collinear(self, other):
             return c
         
-        
-        next_point = self._origin.move_through_normal(self._normal)
         x1, y1 = self._origin.p_x, self._origin.p_y
-        x2, y2 = next_point.p_x, next_point.p_y
+        
+        if isinstance(other, Line):
+            next_point = self._origin.move_through_normal(self._normal)
+            x2, y2 = next_point.p_x, next_point.p_y
+        else:
+            x2, y2 = other.end.p_x, other.end.p_y
 
         t1, t2 = physics_formula.intersects_check(self, other)
         ep = 1e-9
         if t1 == math.inf or t2 == math.inf:
             return None
-        
+        print(t1, t2)
         t1_min, t1_max = self._det_path()
         
         if t1_min-ep <= t1 <= t1_max+ep or t1_min-ep <= t2 <= t1_max+ep:
@@ -120,7 +131,6 @@ class AbstractPath(ABC, Validator):
     
     
     
-
 
 class AbstractFigure(ABC, Validator):
     ...
@@ -167,8 +177,6 @@ class Point(Validator):
         self.p_y = p_y
         super().__init__(p_x=p_x, p_y=p_y)
 
-    
-
     def __str__(self) -> str:
         return f'{type(self).__name__} at {repr(self.p_x)}, {repr(self.p_y)}'
     
@@ -205,7 +213,11 @@ class Point(Validator):
         
     def __neg__(self) -> Point:
         return Point(-self.p_x, -self.p_y)
-        
+
+    @classmethod
+    def from_pair(cls, pair: tuple[float, float]) -> Point:
+        return cls(pair[0], pair[1]) 
+      
     def move_through_normal(self, normal: Normal, *, t: float=1) -> Point:
         new_p_x = self.p_x + (t*normal.x)
         new_p_y = self.p_y + (t*normal.y)
@@ -322,6 +334,10 @@ class Line(AbstractPath):
         return self._normal
     
     @property
+    def end(self) -> Point:
+        return self._end
+    
+    @property
     def length(self) -> float:
         return math.inf
 
@@ -332,6 +348,7 @@ class Line(AbstractPath):
     
     def point_at_t(self, t: float=1) -> Point:
         return self._origin.move_through_normal(self._normal, t=t)
+
 
 
 
@@ -360,6 +377,11 @@ class Segment(AbstractPath):
         if super().__eq__(other) and self._end == self._end:
             return True
         return False
+
+    @classmethod
+    def from_pair(cls, pair: tuple[Point, Point]) -> Segment:
+        return cls(pair[0], pair[1])
+
 
     @property
     def origin(self) -> Point:
@@ -448,6 +470,10 @@ class Ray(AbstractPath):
         return self._normal
     
     @property
+    def end(self) -> Point:
+        return self._end
+    
+    @property
     def length(self) -> float:
         return math.inf
     
@@ -518,7 +544,7 @@ class Ball(Circle, Particle):
 
 
 
-class surface(Segment, Particle):
+class Surface(Segment, Particle):
     ...
 
 
@@ -561,11 +587,17 @@ class physics_formula:
     
     @staticmethod
     def intersects_check(a: AbstractPath, b: AbstractPath) -> tuple[float, float]:
-        next_point = a.origin.move_through_normal(a.normal)
+        next_point = physics_formula._check_insteance_return_point(a)
+        other_next_point = physics_formula._check_insteance_return_point(b)
+        
         x1, y1 = a.origin.p_x, a.origin.p_y
         x2, y2 = next_point.p_x, next_point.p_y
 
-        other_next_point = b.origin.move_through_normal(b.normal)
+        if isinstance(a, Line):
+            other_next_point = b.origin.move_through_normal(b.normal)
+        else:
+            other_next_point = b.end
+
         x3, y3 = b.origin.p_x, b.origin.p_y
         x4, y4 = other_next_point.p_x, other_next_point.p_y
 
@@ -581,9 +613,16 @@ class physics_formula:
         return t1, t2
     
     @staticmethod
+    def _check_insteance_return_point(a: AbstractPath) -> Point:
+        if isinstance(a, Line):
+            return a.origin.move_through_normal(a.normal)
+        else:
+            return a.end
+
+    
+    @staticmethod
     def check_collinear(a: AbstractPath, b: AbstractPath) -> AbstractPath | None:
         if abs(a.normal) != abs(b.normal):
-            print(a.normal, b.normal)
             return None
         
         if isinstance(a, Segment) and isinstance(b, Segment):
@@ -601,30 +640,37 @@ class physics_formula:
             return a
             
     @staticmethod
-    def compare_collinear_segments(a: Segment, b: Segment) -> tuple[Point, Point]:
+    def compare_collinear_segments(a: Segment, b: Segment) -> tuple[Point, Point] | None:
         one = x1, y1 = a.origin.p_x, a.origin.p_y
         two = x2, y2 = a.end.p_x, a.end.p_y
         three = x3, y3 = b.origin.p_x, b.origin.p_y
         four = x4, y4 = b.end.p_x, b.end.p_y
-
-        to_return: list[int] = [0, 0, 0, 0]
-        points: list[Point] = [Point(lower_origin_x, )]
 
         lower_origin_x, lower_origin_y = (min(x1, x2), min(y1, y2))
         upper_origin_x, upper_origin_y = (max(x1, x2), max(y1, y2))
         lower_end_x, lower_end_y = (min(x3, x4), min(y3, y4))
         upper_end_x, upper_end_y = (max(x3, x4), max(y3, y4))
         
-        if (lower_origin_x <= x3 <= upper_origin_x and lower_origin_y <= y3 <= upper_origin_y):
-            to_return[0] ^= 1
-        if (lower_origin_x <= x4 <= upper_origin_x and lower_origin_y <= y4 <= upper_origin_y):
-            to_return[1] ^= 1
+        to_return: list[int] = [0, 0, 0, 0]
+        points: list[Point] = [
+            Point.from_pair(one),
+            Point.from_pair(two),
+            Point.from_pair(three),
+            Point.from_pair(four)]
+        
         if (lower_end_x <= x1 <= upper_end_x and lower_end_y <= y1 <= upper_end_y):
-            to_return[2] ^= 1
+            to_return[0] ^= 1
         if (lower_end_x <= x2 <= upper_end_x and lower_end_y <= y2 <= upper_end_y):
+            to_return[1] ^= 1
+        if (lower_origin_x <= x3 <= upper_origin_x and lower_origin_y <= y3 <= upper_origin_y):
+            to_return[2] ^= 1
+        if (lower_origin_x <= x4 <= upper_origin_x and lower_origin_y <= y4 <= upper_origin_y):
             to_return[3] ^= 1
+
         evaluate = zip(to_return, points)
-        final_points = tuple()
+        final_points: tuple[Point, ...] = tuple(point for num, point in evaluate if num)
+        if len(final_points) == 2:
+            return final_points
 
 
 
