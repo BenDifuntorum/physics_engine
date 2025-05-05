@@ -23,20 +23,20 @@ class Validator:
 
 class AbstractPath(ABC, Validator):
     _origin: Point
-    _vect: Vect
+    _normal: Normal
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, type(self)) and \
         self._origin == other._origin and \
-        math.isclose(self._vect.x, other._vect.x) and \
-        math.isclose(self._vect.y, other._vect.y):
+        math.isclose(self._normal.x, other._normal.x) and \
+        math.isclose(self._normal.y, other._normal.y):
             return True
         return False
 
     @property
     def slope(self) -> float:
         x1, y1 = self._origin.p_x, self._origin.p_y
-        next = self._origin.move_through_vect(self._vect)
+        next = self._origin.move_through_normal(self._normal)
         x2, y2 = next.p_x, next.p_y
 
         dy, dx = y2-y1, x2-x1
@@ -52,8 +52,8 @@ class AbstractPath(ABC, Validator):
     
     @property
     @abstractmethod
-    def vect(self) -> Vect:
-        return self._vect
+    def normal(self) -> Normal:
+        return self._normal
     
     @abstractmethod
     def perpendicular(self) -> AbstractPath:
@@ -76,6 +76,8 @@ class AbstractPath(ABC, Validator):
                 return (-1, 1)
             case 'Ray':
                 return (-math.inf, 1)
+            case 'DirSeg':
+                return (-1, 1)
             case _:
                 return (0, 0)
     
@@ -86,22 +88,18 @@ class AbstractPath(ABC, Validator):
         else:
             assert isinstance(other, AbstractPath)
             return self._intersects_line(other)
-        
-    
-    
-                
-
+  
     
     def _intersects_line(self, other: AbstractPath) -> Point | AbstractPath | None:
         if c := physics_formula.check_collinear(self, other):
             return c
         
         
-        next_point = self._origin.move_through_vect(self._vect)
+        next_point = self._origin.move_through_normal(self._normal)
         x1, y1 = self._origin.p_x, self._origin.p_y
         x2, y2 = next_point.p_x, next_point.p_y
 
-        t1, t2 = self._intersects_helper(other)
+        t1, t2 = physics_formula.intersects_check(self, other)
         ep = 1e-9
         if t1 == math.inf or t2 == math.inf:
             return None
@@ -119,25 +117,7 @@ class AbstractPath(ABC, Validator):
         ...
         # find out which line/s and then find the intersection/s
 
-    def _intersects_helper(self, other: AbstractPath) -> tuple[float, float]:
-        next_point = self._origin.move_through_vect(self._vect)
-        x1, y1 = self._origin.p_x, self._origin.p_y
-        x2, y2 = next_point.p_x, next_point.p_y
-
-        other_next_point = other._origin.move_through_vect(other._vect)
-        x3, y3 = other._origin.p_x, other._origin.p_y
-        x4, y4 = other_next_point.p_x, other_next_point.p_y
-
-        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-
-        if math.isclose(denom, 0):
-            return math.inf, math.inf
-        
-        
-        t1 = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
-        t2 = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / denom
-
-        return t1, t2
+    
     
     
 
@@ -226,26 +206,26 @@ class Point(Validator):
     def __neg__(self) -> Point:
         return Point(-self.p_x, -self.p_y)
         
-    def move_through_vect(self, vect: Vect, *, t: float=1) -> Point:
-        new_p_x = self.p_x + (t*vect.x)
-        new_p_y = self.p_y + (t*vect.y)
+    def move_through_normal(self, normal: Normal, *, t: float=1) -> Point:
+        new_p_x = self.p_x + (t*normal.x)
+        new_p_y = self.p_y + (t*normal.y)
 
         return Point(new_p_x, new_p_y)
     
 
 
 
-class Vect(Validator):
+class Normal(Validator):
     x: float | int
     y: float | int
 
     def __init__(self, x: float | int, y: float | int) -> None:
         
         if x == 0 and y == 0:
-            raise ValueError('Vect cannot be formed from 0 and 0')
+            raise ValueError('Normal cannot be formed from 0 and 0')
         
         elif not math.isclose(math.hypot(x, y), 1):
-            x, y = physics_formula.vect_normal(x, y)
+            x, y = physics_formula.normal_normal(x, y)
         
         else:
             self.x = x
@@ -253,7 +233,7 @@ class Vect(Validator):
 
         super().__init__(x=x, y=y)
     @classmethod
-    def from_pair(cls, l: tuple[float, float]) -> Vect:
+    def from_pair(cls, l: tuple[float, float]) -> Normal:
         x, y = l
         return cls(x, y)
 
@@ -263,26 +243,26 @@ class Vect(Validator):
     def __str__(self) -> str:
         return f'At t interval, moves line {self.x}t through x and {self.y}t through y.'
 
-    def __abs__(self) -> Vect:
-        return Vect(self.x, abs(self.y))
+    def __abs__(self) -> Normal:
+        return Normal(self.x, abs(self.y))
     
-    def __neg__(self) -> Vect:
-        return Vect(-self.x, -self.y)
+    def __neg__(self) -> Normal:
+        return Normal(-self.x, -self.y)
     
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, Vect) and math.isclose(self.x, other.x) and math.isclose(self.y, other.y):
+        if isinstance(other, Normal) and math.isclose(self.x, other.x) and math.isclose(self.y, other.y):
             return True
         else: 
             return False
     
     @property
-    def perpendicular(self) -> Vect:
-        return Vect(-self.y, self.x)
+    def perpendicular(self) -> Normal:
+        return Normal(-self.y, self.x)
       
     @property
-    def antiperpendicular(self) -> Vect:
+    def antiperpendicular(self) -> Normal:
         """Negative of the perpendicular"""
-        return Vect(self.y, -self.x)
+        return Normal(self.y, -self.x)
 
 
 
@@ -298,9 +278,9 @@ class Particle(Point, Tangible, Movable):
 
         super(Movable).__init__(v_x=v_x, v_y=v_y, a_x=a_x, a_y=a_y)
     @classmethod
-    def init_md(cls, p_x: float, p_y: float, *, v_m: float, v_d: Vect, a_m: float, a_d: Vect) -> Particle:
-        v_x, v_y = physics_formula.vect_split(v_m, v_d)
-        a_x, a_y = physics_formula.vect_split(a_m, a_d)
+    def init_md(cls, p_x: float, p_y: float, *, v_m: float, v_d: Normal, a_m: float, a_d: Normal) -> Particle:
+        v_x, v_y = physics_formula.normal_split(v_m, v_d)
+        a_x, a_y = physics_formula.normal_split(a_m, a_d)
         
         return cls(p_x, p_y, v_x=v_x, v_y=v_y, a_x=a_x, a_y=a_y)
 
@@ -309,35 +289,37 @@ class Particle(Point, Tangible, Movable):
         return math.hypot(self._v_x, self._v_y)
 
     @property
-    def v_d(self) -> Vect:
-        return Vect(self._v_x, self._v_y)
+    def v_d(self) -> Normal:
+        return Normal(self._v_x, self._v_y)
     
 
 
 
 class Line(AbstractPath):
-    def __init__(self, origin: Point, vect: Vect) -> None:
+    def __init__(self, origin: Point, normal: Normal) -> None:
         self._origin = origin
-        if vect.x < 0 and vect.y < 0:
-            vect = -vect
-        self._vect = vect
-        self._end = Point(math.inf, math.inf)
+        if normal.y < 0:
+            normal = -normal
+        self._normal = normal
+        mult_x = self._normal.x / abs(self._normal.x)
+        mult_y = self._normal.y / abs(self._normal.y)
+        self._end = Point(math.inf*mult_x, math.inf*mult_y)
 
-        super().__init__(_origin=origin, _vect=vect)
+        super().__init__(_origin=origin, _normal=normal)
     
     def __repr__(self) -> str:
-        return f'{type(self).__name__}(origin={repr(self._origin)}, vect={repr(self._vect)})'
+        return f'{type(self).__name__}(origin={repr(self._origin)}, normal={repr(self._normal)})'
 
     def __str__(self) -> str:
-        return f'{type(self).__name__} starting on {repr(self._origin)} with vect {repr(self._vect)}'
+        return f'{type(self).__name__} starting on {repr(self._origin)} with normal {repr(self._normal)}'
    
     @property
     def origin(self) -> Point:
         return self._origin
     
     @property
-    def vect(self) -> Vect:
-        return self._vect
+    def normal(self) -> Normal:
+        return self._normal
     
     @property
     def length(self) -> float:
@@ -346,10 +328,10 @@ class Line(AbstractPath):
     def perpendicular(self, origin: Point | None = None) -> Line:
         if not origin:
             origin = self._origin
-        return Line(origin, self._vect.perpendicular)
+        return Line(origin, self._normal.perpendicular)
     
     def point_at_t(self, t: float=1) -> Point:
-        return self._origin.move_through_vect(self._vect, t=t)
+        return self._origin.move_through_normal(self._normal, t=t)
 
 
 
@@ -359,12 +341,11 @@ class Segment(AbstractPath):
     def __init__(self, origin: Point, end: Point) -> None:
         self._origin = origin
         self._end = end
-
         
         x1, y1 = self._origin.p_x, self._origin.p_y
         x2, y2 = self._end.p_x, self._end.p_y
-        d = physics_formula.vect_normal(x2-x1, y2-y1)
-        self._vect = Vect.from_pair(d)
+        d = physics_formula.normal_normal(x2-x1, y2-y1)
+        self._normal = Normal.from_pair(d)
     
         super().__init__(_origin=origin, _end=end)
 
@@ -384,8 +365,8 @@ class Segment(AbstractPath):
         return self._origin
 
     @property
-    def vect(self) -> Vect:
-        return self._vect
+    def normal(self) -> Normal:
+        return self._normal
     
     @property
     def length(self) -> float:
@@ -405,22 +386,22 @@ class Segment(AbstractPath):
         '''Default perpendicular.'''
         if not origin:
             origin = self.midpoint
-        new_vect = self.vect.perpendicular
-        origin = origin.move_through_vect(new_vect, t=-self.length/2)
-        end = origin.move_through_vect(new_vect, t=self.length/2)
+        new_normal = self.normal.perpendicular
+        origin = origin.move_through_normal(new_normal, t=-self.length/2)
+        end = origin.move_through_normal(new_normal, t=self.length/2)
         return Segment(origin, end)
     
     def antiperpendicular(self, origin: Point | None = None) -> Segment:
         '''Default antiperpendicular.'''
         if not origin:
             origin = self.midpoint
-        new_vect = -self.vect.perpendicular
-        start = origin.move_through_vect(new_vect, t=-self.length/2)
-        end = origin.move_through_vect(new_vect, t=self.length/2)
+        new_normal = -self.normal.perpendicular
+        start = origin.move_through_normal(new_normal, t=-self.length/2)
+        end = origin.move_through_normal(new_normal, t=self.length/2)
         return Segment(start, end)
         
     def point_at_t(self, t: float) -> Point:
-        p = self._origin.move_through_vect(self._vect, t=t)
+        p = self._origin.move_through_normal(self._normal, t=t)
 
         x_min = min(self._origin.p_x, self._end.p_x)
         x_max = max(self._origin.p_x, self._end.p_x)
@@ -435,31 +416,35 @@ class Segment(AbstractPath):
 
 
 class Ray(AbstractPath):
-    def __init__(self, origin: Point, vect: Vect) -> None:
+    def __init__(self, origin: Point, normal: Normal) -> None:
         self._origin = origin
-        self._vect = vect
-        super().__init__(_origin=origin, _vect=vect)
+        self._normal = normal
+        super().__init__(_origin=origin, _normal=normal)
+        
+        mult_x = self._normal.x / abs(self._normal.x)
+        mult_y = self._normal.y / abs(self._normal.y)
+        self._end = Point(math.inf*mult_x, math.inf*mult_y)
 
     def __str__(self) -> str:
-        return f'{type(self).__name__} starting on {repr(self._origin)} and headed to {repr(self._vect)}'
+        return f'{type(self).__name__} starting on {repr(self._origin)} and headed to {repr(self._normal)}'
 
     def __repr__(self) -> str:
-        return f'{type(self).__name__}(start={repr(self._origin)}, vect={repr(self._vect)})' 
+        return f'{type(self).__name__}(start={repr(self._origin)}, normal={repr(self._normal)})' 
 
     @classmethod
     def from_points(cls, origin: Point, end: Point) -> Ray:
         x1, y1 = origin.p_x, origin.p_y
         x2, y2 = end.p_x, end.p_y
-        vect = physics_formula.vect_normal(x2-x1, y2-y1)
-        return cls(origin, Vect.from_pair(vect))
+        normal = physics_formula.normal_normal(x2-x1, y2-y1)
+        return cls(origin, Normal.from_pair(normal))
 
     @property
     def origin(self) -> Point:
         return self._origin
 
     @property
-    def vect(self) -> Vect:
-        return self._vect
+    def normal(self) -> Normal:
+        return self._normal
     
     @property
     def length(self) -> float:
@@ -469,23 +454,31 @@ class Ray(AbstractPath):
         '''Default perpendicular.'''
         if not origin:
             origin = self._origin
-        new_vect = self.vect.perpendicular
-        new_origin = origin.move_through_vect(new_vect, t=t)
-        return Ray(new_origin, new_vect)
+        new_normal = self.normal.perpendicular
+        new_origin = origin.move_through_normal(new_normal, t=t)
+        return Ray(new_origin, new_normal)
     
     def antiperpendicular(self, origin: Point | None = None, t: float = 0) -> Ray:
         '''Default antiperpendicular.'''
         if not origin:
             origin = self._origin
-        new_vect = -self.vect.perpendicular
-        new_origin = origin.move_through_vect(new_vect, t=t)
-        return Ray(new_origin, new_vect)
+        new_normal = -self.normal.perpendicular
+        new_origin = origin.move_through_normal(new_normal, t=t)
+        return Ray(new_origin, new_normal)
         
     def point_at_t(self, t: float) -> Point:
-        p = self._origin.move_through_vect(self._vect, t=t)
+        p = self._origin.move_through_normal(self._normal, t=t)
         if t < 0:
             raise ValueError(f'No point at t={t}')
         return p
+
+
+
+
+class Vector(AbstractPath):
+    ...
+
+
 
 
 class Shape:
@@ -537,9 +530,9 @@ class physics_formula:
         ...
 
     @staticmethod
-    def vect_split(magnitude: float, vect: Vect) -> tuple[float, float]:
-        m_x = magnitude * vect.x
-        m_y = magnitude * vect.y
+    def normal_split(magnitude: float, normal: Normal) -> tuple[float, float]:
+        m_x = magnitude * normal.x
+        m_y = magnitude * normal.y
         return m_x, m_y
     
     @staticmethod
@@ -550,7 +543,7 @@ class physics_formula:
         return math.hypot(y2-y1, x2-x1)
     
     @staticmethod
-    def vect_normal(x: float, y: float) -> tuple[float, float]:
+    def normal_normal(x: float, y: float) -> tuple[float, float]:
         length = math.hypot(x, y)
         new_x = x/length
         new_y = y/length
@@ -566,35 +559,69 @@ class physics_formula:
         return -math.degrees(angle)
     
     @staticmethod
+    def intersects_check(a: AbstractPath, b: AbstractPath) -> tuple[float, float]:
+        next_point = a.origin.move_through_normal(a.normal)
+        x1, y1 = a.origin.p_x, a.origin.p_y
+        x2, y2 = next_point.p_x, next_point.p_y
+
+        other_next_point = b.origin.move_through_normal(b.normal)
+        x3, y3 = b.origin.p_x, b.origin.p_y
+        x4, y4 = other_next_point.p_x, other_next_point.p_y
+
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+
+        if math.isclose(denom, 0):
+            return math.inf, math.inf
+        
+        
+        t1 = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+        t2 = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / denom
+
+        return t1, t2
+    
+    @staticmethod
     def check_collinear(a: AbstractPath, b: AbstractPath) -> AbstractPath | None:
-        if a.vect != b.vect:
+        if abs(a.normal) != abs(b.normal):
             return 
         
-        if a.origin.p_x 
-            if isinstance(a, Segment) and isinstance(b, Segment):
-                a, b = physics_formula.compare_collinear_segments(a, b)
-                return Segment()
+        if isinstance(a, Segment) and isinstance(b, Segment):
+            a, b = physics_formula.compare_collinear_segments(a, b)
+            return Segment(a, b)
 
-            
-            elif isinstance(a, Segment) or isinstance(b, Segment):
-                return a if isinstance(a, Segment) else b
-            
-            elif isinstance(a, Ray) or isinstance(b, Ray):
-                return a if isinstance(a, Ray) else b
+        
+        elif isinstance(a, Segment) or isinstance(b, Segment):
+            return a if isinstance(a, Segment) else b
+        
+        elif isinstance(a, Ray) or isinstance(b, Ray):
+            return a if isinstance(a, Ray) else b
 
-            else:
-                return a
+        else:
+            return a
             
     @staticmethod
-    def compare_collinear_segments(a: Segment, b: Segment) -> tuple[point, point]:
+    def compare_collinear_segments(a: Segment, b: Segment) -> tuple[Point, Point]:
         x1, y1 = a.origin.p_x, a.origin.p_y
         x2, y2 = a.end.p_x, a.end.p_y
         x3, y3 = b.origin.p_x, b.origin.p_y
         x4, y4 = b.end.p_x, b.end.p_y
 
-        new_origin_x = 
+        to_return: list[int] = [0, 0, 0, 0]
 
-        return 
+        lower_origin_x, lower_origin_y = (min(x1, x2), min(y1, y2))
+        upper_origin_x, upper_origin_y = (max(x1, x2), max(y1, y2))
+        lower_end_x, lower_end_y = (min(x3, x4), min(y3, y4))
+        upper_end_x, upper_end_y = (max(x3, x4), max(y3, y4))
+        
+        if (lower_origin_x <= x3 <= upper_origin_x and lower_origin_y <= y3 <= upper_origin_y):
+            to_return[0] ^= 1
+        if (lower_origin_x <= x4 <= upper_origin_x and lower_origin_y <= y4 <= upper_origin_y):
+            to_return[1] ^= 1
+        if (lower_end_x <= x1 <= upper_end_x and lower_end_y <= y1 <= upper_end_y):
+            to_return[2] ^= 1
+        if (lower_end_x <= x2 <= upper_end_x and lower_end_y <= y2 <= upper_end_y):
+            to_return[3] ^= 1
+
+            
     
     @staticmethod
     def closer_to_zero(a: float, b: float) -> float:
@@ -616,3 +643,5 @@ class physics_formula:
             return a, b
         else:
             return b, a
+        
+    
