@@ -73,11 +73,11 @@ class AbstractPath(ABC, Validator):
             case 'Line':
                 return (-math.inf, math.inf)
             case 'Segment':
-                return (-1, 1)
+                return (0, 1)
             case 'Ray':
                 return (-math.inf, 1)
             case 'DirSeg':
-                return (-1, 1)
+                return (0, 1)
             case _:
                 return (0, 0)
     
@@ -344,6 +344,7 @@ class Segment(AbstractPath):
         
         x1, y1 = self._origin.p_x, self._origin.p_y
         x2, y2 = self._end.p_x, self._end.p_y
+
         d = physics_formula.normal_normal(x2-x1, y2-y1)
         self._normal = Normal.from_pair(d)
     
@@ -582,7 +583,8 @@ class physics_formula:
     @staticmethod
     def check_collinear(a: AbstractPath, b: AbstractPath) -> AbstractPath | None:
         if abs(a.normal) != abs(b.normal):
-            return 
+            print(a.normal, b.normal)
+            return None
         
         if isinstance(a, Segment) and isinstance(b, Segment):
             a, b = physics_formula.compare_collinear_segments(a, b)
@@ -600,12 +602,13 @@ class physics_formula:
             
     @staticmethod
     def compare_collinear_segments(a: Segment, b: Segment) -> tuple[Point, Point]:
-        x1, y1 = a.origin.p_x, a.origin.p_y
-        x2, y2 = a.end.p_x, a.end.p_y
-        x3, y3 = b.origin.p_x, b.origin.p_y
-        x4, y4 = b.end.p_x, b.end.p_y
+        one = x1, y1 = a.origin.p_x, a.origin.p_y
+        two = x2, y2 = a.end.p_x, a.end.p_y
+        three = x3, y3 = b.origin.p_x, b.origin.p_y
+        four = x4, y4 = b.end.p_x, b.end.p_y
 
         to_return: list[int] = [0, 0, 0, 0]
+        points: list[Point] = [Point(lower_origin_x, )]
 
         lower_origin_x, lower_origin_y = (min(x1, x2), min(y1, y2))
         upper_origin_x, upper_origin_y = (max(x1, x2), max(y1, y2))
@@ -620,6 +623,10 @@ class physics_formula:
             to_return[2] ^= 1
         if (lower_end_x <= x2 <= upper_end_x and lower_end_y <= y2 <= upper_end_y):
             to_return[3] ^= 1
+        evaluate = zip(to_return, points)
+        final_points = tuple()
+
+
 
             
     
