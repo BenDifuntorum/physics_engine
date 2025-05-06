@@ -1,10 +1,11 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 import math
-from types import GenericAlias, UnionType
+from types import GenericAlias
 from typing import get_type_hints, Sequence, get_origin
 
 class Validator:
+    '''Validates inputs'''
     def __init__(self, **kwargs: object):
         self.__dict__.update(kwargs)  # Set the instance attributes dynamically
         self._validate()
@@ -28,9 +29,18 @@ class Validator:
                                  f"but got {type(value).__name__}")
 
 
+class AbstractObject(ABC, Validator):
+    def __repr__(self) -> str:
+        cls = self.__class__
+        values: list[str] = []
+        
+        for attr, value in self.__dict__.items():
+            values.append(f'{attr.strip('_')}={value!r}')
+        
+        return f"{cls.__name__}({', '.join(values)})"
 
 
-class AbstractPath(ABC, Validator):
+class AbstractPath(AbstractObject):
     _origin: Point
     _normal: Normal
     _end: Point
@@ -41,11 +51,8 @@ class AbstractPath(ABC, Validator):
         return False
     
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, type(self)) and \
-        self._origin == other._origin and \
-        math.isclose(self._normal.x, other._normal.x) and \
-        math.isclose(self._normal.y, other._normal.y):
-            return True
+        if isinstance(other, type(self)):
+            return self._origin == other._origin and self._normal == other._normal
         return False
 
     @property
@@ -95,7 +102,7 @@ class AbstractPath(ABC, Validator):
     def intersects(self, other: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point, Point] | Point | None:
         return physics_formula.find_intersection(self, other)
     
-class AbstractFigure(ABC, Validator):
+class AbstractFigure(AbstractObject):
     _center: Point
     _vertices: tuple[Point, ...]
     _edges: tuple[Segment, ...]
@@ -131,7 +138,7 @@ class AbstractFigure(ABC, Validator):
 
 
 
-class Movable(ABC, Validator):
+class Movable(AbstractObject):
     @property
     @abstractmethod
     def v_x(self) -> float:
@@ -155,26 +162,24 @@ class Movable(ABC, Validator):
 
 
 
-class Tangible(ABC, Validator):
+class Tangible(AbstractObject):
     ...
 
 
 
 
-class Point(Validator):
+class Point(AbstractObject):
     p_x: float | int
     p_y: float | int
 
     def __init__(self, p_x: float | int, p_y: float | int) -> None:
         self.p_x = p_x
         self.p_y = p_y
-        super().__init__(p_x=p_x, p_y=p_y)
+
+        super().__init__(p_x=self.p_x, p_y=self.p_y)
 
     def __str__(self) -> str:
         return f'{type(self).__name__} at {repr(self.p_x)}, {repr(self.p_y)}'
-    
-    def __repr__(self) -> str:
-        return f'{type(self).__name__}(x={self.p_x}, y={self.p_y})'
     
     def __add__(self, other: Point) -> Point:
         new_p_x = self.p_x + other.p_x
@@ -197,15 +202,12 @@ class Point(Validator):
         return Point(new_p_x, new_p_y)
     
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, Point) and \
-            math.isclose(self.p_x, other.p_x) and \
-            math.isclose(self.p_x, other.p_y):
-            return True
-        else:
-            return False
+        if isinstance(other, Point):
+            return math.isclose(self.p_x, other.p_x) and math.isclose(self.p_y, other.p_y)
+        return False
         
     def __hash__(self) -> int:
-        return hash(Point(self.p_x, self.p_y))
+        return hash((self.p_x, self.p_y))
         
     def __neg__(self) -> Point:
         return Point(-self.p_x, -self.p_y)
@@ -223,7 +225,7 @@ class Point(Validator):
 
 
 
-class Normal(Validator):
+class Normal(AbstractObject):
     x: float | int
     y: float | int
 
@@ -240,13 +242,11 @@ class Normal(Validator):
             self.y = y
 
         super().__init__(x=x, y=y)
+
     @classmethod
     def from_pair(cls, l: tuple[float, float]) -> Normal:
         x, y = l
         return cls(x, y)
-
-    def __repr__(self) -> str:
-        return f'{type(self).__name__}(x={self.x}, y={self.y})'
     
     def __str__(self) -> str:
         return f'At t interval, moves line {self.x}t through x and {self.y}t through y.'
@@ -261,10 +261,9 @@ class Normal(Validator):
         return Normal(-self.x, -self.y)
     
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, Normal) and math.isclose(self.x, other.x) and math.isclose(self.y, other.y):
-            return True
-        else: 
-            return False
+        if isinstance(other, Normal):
+            return math.isclose(self.x, other.x) and math.isclose(self.y, other.y)
+        return False
         
     def __hash__(self) -> int:
         return hash((self.x, self.y))
@@ -291,6 +290,7 @@ class Particle(Point, Tangible, Movable):
         self._a_y = a_y
 
         super(Movable).__init__(v_x=v_x, v_y=v_y, a_x=a_x, a_y=a_y)
+    
     @classmethod
     def init_md(cls, p_x: float, p_y: float, *, v_m: float, v_d: Normal, a_m: float, a_d: Normal) -> Particle:
         v_x, v_y = physics_formula.normal_split(v_m, v_d)
@@ -321,9 +321,6 @@ class Line(AbstractPath):
 
         super().__init__(_origin=origin, _normal=normal)
     
-    def __repr__(self) -> str:
-        return f'{type(self).__name__}(origin={repr(self._origin)}, normal={repr(self._normal)})'
-
     def __str__(self) -> str:
         return f'{type(self).__name__} starting on {repr(self._origin)} with normal {repr(self._normal)}'
     
@@ -374,14 +371,10 @@ class Segment(AbstractPath):
 
     def __str__(self) -> str:
         return f'{type(self).__name__} starting on {repr(self._origin)} and ending on {repr(self._end)}'
-
-    def __repr__(self) -> str:
-        return f'{type(self).__name__}(start={repr(self._origin)}, end={repr(self._end)})'
     
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, Segment) and \
-            (self._origin == other.end or self._end == other.origin) and \
-            abs(self.normal) == abs(other.normal):
+        if isinstance(other, Segment):
+            return (self._origin == other.end or self._end == other.end) and abs(self.normal) == abs(other.normal)
             return True
         return False
 
@@ -457,9 +450,6 @@ class Ray(AbstractPath):
     def __str__(self) -> str:
         return f'{type(self).__name__} starting on {repr(self._origin)} and headed to {repr(self._normal)}'
 
-    def __repr__(self) -> str:
-        return f'{type(self).__name__}(start={repr(self._origin)}, normal={repr(self._normal)})' 
-
     @classmethod
     def from_points(cls, origin: Point, end: Point) -> Ray:
         x1, y1 = origin.p_x, origin.p_y
@@ -524,9 +514,6 @@ class Vector(AbstractPath):
     
     def __str__(self) -> str:
         return f'{type(self).__name__} starting on {repr(self._origin)} and ending on {repr(self._end)}'
-
-    def __repr__(self) -> str:
-        return f'{type(self).__name__}(start={repr(self._origin)}, end={repr(self._end)})'
     
     def __eq__(self, other: object) -> bool:
         if super().__eq__(other) and self._end == self._end:
@@ -673,16 +660,13 @@ class Polygon(Shape):
     def __init__(self, *points: Point) -> None:
         super().__init__(*points)
 
-    def __repr__(self) -> str:
-        return f'Polygon'
 
 
 
 
 class Circle(AbstractFigure):
-    def __repr__(self) -> str:
-        return f'Circle'
-    ...
+    def __init__(self, **kwargs: object):
+        super().__init__(**kwargs)
 
 
 
@@ -691,20 +675,12 @@ class Triangle(Shape):
     def __init__(self, *points: Point) -> None:
         super().__init__(*points)
 
-    def __repr__(self) -> str:
-        return f'Triangle'
-    ...
-
 
 
 
 class QuadReg(Shape):
     def __init__(self, *points: Point) -> None:
         super().__init__(*points)
-
-    def __repr__(self) -> str:
-        return f'QuadReg'
-    ...
 
 
 
