@@ -1,7 +1,8 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 import math
-from typing import get_type_hints
+from types import GenericAlias, UnionType
+from typing import get_type_hints, Sequence, get_origin
 
 class Validator:
     def __init__(self, **kwargs: object):
@@ -16,12 +17,15 @@ class Validator:
             if expected_type is float and isinstance(value, int):
                 setattr(self, attr, float(value))
                 continue
+            
+            if generic_type := get_origin(expected_type):
+                if type(expected_type) == GenericAlias:
+                    expected_type = generic_type
 
             if not isinstance(value, expected_type):
-                raise TypeError(f"Attribute '{attr}' must be of type {expected_type.__name__}, "
+                print(attr, expected_type.__name__, type(value).__name__)
+                raise TypeError(f"Attribute {attr} must be of type {expected_type.__name__}, "
                                  f"but got {type(value).__name__}")
-
-                                 'asd'
 
 
 
@@ -29,6 +33,7 @@ class Validator:
 class AbstractPath(ABC, Validator):
     _origin: Point
     _normal: Normal
+    _end: Point
 
     def __contains__(self, other: Point) -> bool:
         if physics_formula.is_point_on_line(self._origin, self._origin.move_through_normal(self._normal), other):
@@ -57,19 +62,16 @@ class AbstractPath(ABC, Validator):
             return dy/dx
         
     @property
-    @abstractmethod
     def origin(self) -> Point:
-        pass
+        return self._origin
     
     @property
-    @abstractmethod
     def normal(self) -> Normal:
-        pass
+        return self._normal
     
     @property
-    @abstractmethod
     def end(self) -> Point:
-        pass
+        return self._end
     
     @property
     @abstractmethod
@@ -90,49 +92,41 @@ class AbstractPath(ABC, Validator):
     def point_at_t(self, t: float) -> Point:
         pass
     
-    
-    
     def intersects(self, other: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point, Point] | Point | None:
-        if isinstance(other, AbstractFigure):
-            return self._intersects_shape(other)
-        
-        else:
-            assert isinstance(other, AbstractPath)
-            return self._intersects_line(other)
-  
+        return physics_formula.find_intersection(self, other)
     
-    def _intersects_line(self, other: AbstractPath) -> Point | AbstractPath | None:
-        if c := physics_formula.check_collinear(self, other):
-            return c
-
-        t1, t2 = physics_formula.intersects_check(self, other)
-        print(t1, t2)
-        if t1 == math.inf or t2 == math.inf:
-            return None
-
-        t1_min, t1_max = self.scalar_bounds
-        t2_min, t2_max = other.scalar_bounds
-        
-        ep = 1e-9
-        if t1_min-ep <= t1 <= t1_max+ep or t2_min-ep <= t2 <= t2_max+ep:
-            if isinstance(self, Line) or isinstance(self, Ray):
-                l = 1
-            else:
-                l = self.length
-            return self.point_at_t(t1*l)
-        
-        return None
-
-    def _intersects_shape(self, other: AbstractFigure) -> Point | None:
-        ...
-        # find out which line/s and then find the intersection/s
-
-    
-    
-    
-
 class AbstractFigure(ABC, Validator):
-    ...
+    _center: Point
+    _vertices: tuple[Point, ...]
+    _edges: tuple[Segment, ...]
+
+    @property
+    @abstractmethod
+    def center(self) -> Point:
+        pass
+    
+    @property
+    @abstractmethod
+    def vertices(self) -> tuple[Point, ...]:
+        pass
+    
+    @property
+    @abstractmethod
+    def edges(self) -> tuple[Segment, ...]:
+        pass
+
+    @property
+    @abstractmethod
+    def perimeter(self) -> float:
+        pass
+
+    @property
+    @abstractmethod
+    def area(self) -> float:
+        pass
+
+    def intersects(self, other: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point, Point] | Point | None:
+        ...
 
 
 
@@ -210,6 +204,9 @@ class Point(Validator):
         else:
             return False
         
+    def __hash__(self) -> int:
+        return hash(Point(self.p_x, self.p_y))
+        
     def __neg__(self) -> Point:
         return Point(-self.p_x, -self.p_y)
 
@@ -268,6 +265,9 @@ class Normal(Validator):
             return True
         else: 
             return False
+        
+    def __hash__(self) -> int:
+        return hash((self.x, self.y))
     
     @property
     def perpendicular(self) -> Normal:
@@ -327,17 +327,8 @@ class Line(AbstractPath):
     def __str__(self) -> str:
         return f'{type(self).__name__} starting on {repr(self._origin)} with normal {repr(self._normal)}'
     
-    @property
-    def origin(self) -> Point:
-        return self._origin
-    
-    @property
-    def normal(self) -> Normal:
-        return self._normal
-    
-    @property
-    def end(self) -> Point:
-        return self._end
+    def __hash__(self) -> int:
+        return hash((self._origin, self._normal))
     
     @property
     def length(self) -> float:
@@ -388,7 +379,9 @@ class Segment(AbstractPath):
         return f'{type(self).__name__}(start={repr(self._origin)}, end={repr(self._end)})'
     
     def __eq__(self, other: object) -> bool:
-        if super().__eq__(other) and self._end == self._end:
+        if isinstance(other, Segment) and \
+            (self._origin == other.end or self._end == other.origin) and \
+            abs(self.normal) == abs(other.normal):
             return True
         return False
 
@@ -396,14 +389,6 @@ class Segment(AbstractPath):
     def from_pair(cls, pair: tuple[Point, Point]) -> Segment:
         return cls(pair[0], pair[1])
 
-    @property
-    def origin(self) -> Point:
-        return self._origin
-
-    @property
-    def normal(self) -> Normal:
-        return self._normal
-    
     @property
     def length(self) -> float:
         return physics_formula.line_length(self._origin, self._end)
@@ -417,10 +402,6 @@ class Segment(AbstractPath):
         mid_y = (self._end.p_y + self._origin.p_y) / 2
         mid_x = (self._end.p_x + self._origin.p_x) / 2
         return Point(mid_x, mid_y)
-        
-    @property
-    def end(self) -> Point:
-        return self._end
     
     @property
     def perpendicular(self) -> Segment:
@@ -467,12 +448,12 @@ class Ray(AbstractPath):
     def __init__(self, origin: Point, normal: Normal) -> None:
         self._origin = origin
         self._normal = normal
-        super().__init__(_origin=origin, _normal=normal)
         
         mult_x = self._normal.x / abs(self._normal.x)
         mult_y = self._normal.y / abs(self._normal.y)
         self._end = Point(math.inf*mult_x, math.inf*mult_y)
 
+        super().__init__(_origin=origin, _normal=normal, _end=self._end)
     def __str__(self) -> str:
         return f'{type(self).__name__} starting on {repr(self._origin)} and headed to {repr(self._normal)}'
 
@@ -485,18 +466,6 @@ class Ray(AbstractPath):
         x2, y2 = end.p_x, end.p_y
         normal = physics_formula.normal_normalize(x2-x1, y2-y1)
         return cls(origin, Normal.from_pair(normal))
-
-    @property
-    def origin(self) -> Point:
-        return self._origin
-
-    @property
-    def normal(self) -> Normal:
-        return self._normal
-    
-    @property
-    def end(self) -> Point:
-        return self._end
     
     @property
     def length(self) -> float:
@@ -536,38 +505,205 @@ class Ray(AbstractPath):
 
 
 class Vector(AbstractPath):
+    def __init__(self, origin: Point, end: Point) -> None:
+        self._origin = origin
+        self._end = end
+
+        x1, y1 = self._origin.p_x, self._origin.p_y
+        x2, y2 = self._end.p_x, self._end.p_y
+
+        d = physics_formula.normal_normalize(x2-x1, y2-y1)
+        self._normal = Normal.from_pair(d)
+
+        super().__init__(_origin=origin, _end=end)
+    
+    def __contains__(self, other: Point) -> bool:
+        if super().__contains__(other):
+            return physics_formula.contains_check(self, other)
+        return False
+    
+    def __str__(self) -> str:
+        return f'{type(self).__name__} starting on {repr(self._origin)} and ending on {repr(self._end)}'
+
+    def __repr__(self) -> str:
+        return f'{type(self).__name__}(start={repr(self._origin)}, end={repr(self._end)})'
+    
+    def __eq__(self, other: object) -> bool:
+        if super().__eq__(other) and self._end == self._end:
+            return True
+        return False
+
+    @classmethod
+    def from_pair(cls, pair: tuple[Point, Point]) -> Vector:
+        return cls(pair[0], pair[1])
+    
+    @property
+    def length(self) -> float:
+        return physics_formula.line_length(self._origin, self._end)
+    
     @property
     def scalar_bounds(self) -> tuple[float, float]:
         return (0, 1)
+    
+    @property
+    def midpoint(self) -> Point:
+        mid_y = (self._end.p_y + self._origin.p_y) / 2
+        mid_x = (self._end.p_x + self._origin.p_x) / 2
+        return Point(mid_x, mid_y)
+    
+    @property
+    def perpendicular(self) -> Segment:
+        '''Default perpendicular.'''
+        return self.perpendicular_at(self.midpoint, self.length)
+    
+    def perpendicular_at(self, origin: Point, length: float) -> Segment:
+        if not origin:
+            origin = self.midpoint
+        new_normal = self.normal.perpendicular
+        new_origin = origin.move_through_normal(new_normal, t=-length/2)
+        new_end = origin.move_through_normal(new_normal, t=length/2)
+        return Segment(new_origin, new_end)
+    
+    @property
+    def antiperpendicular(self) -> Segment:
+        '''Default antiperpendicular.'''
+        return self.antiperpendicular_at(self.midpoint, self.length)
+    
+    def antiperpendicular_at(self, origin: Point, length: float) -> Segment:
+        if not origin:
+            origin = self.midpoint
+        new_normal = -self.normal.perpendicular
+        new_origin = origin.move_through_normal(new_normal, t=-length/2)
+        new_end = origin.move_through_normal(new_normal, t=length/2)
+        return Segment(new_origin, new_end)
+        
+    def point_at_t(self, t: float) -> Point:
+        p = self._origin.move_through_normal(self._normal, t=t)
+
+        x_min = min(self._origin.p_x, self._end.p_x)
+        x_max = max(self._origin.p_x, self._end.p_x)
+        y_min = min(self._origin.p_y, self._end.p_y)
+        y_max = max(self._origin.p_y, self._end.p_y)
+
+        if not (x_min <= p.p_x <= x_max and y_min <= p.p_y <= y_max):
+            raise ValueError(f'No point at t={t}')
+        return p
+        
 
 
 
+class Shape(AbstractFigure):
+    def __new__(cls, *points: Point) -> Point | AbstractPath | Shape | None:
+        v = len(points)
+        match v:
+            case 0:
+                return
+            
+            case 1:
+                (p,) = points
+                return p
+            
+            case 2:
+                obj = object.__new__(Segment)
+                return Segment(*points)
+            
+            case 3:
+                obj = object.__new__(Triangle) 
+                obj.__init__(*points)
+                return obj
+            
+            case 4:
+                p1, p2, p3, p4 = points
+                if abs(Segment(p1, p2).normal) == abs(Segment(p3, p4).normal) and \
+                    abs(Segment(p1, p4).normal) == abs(Segment(p2, p3).normal):
+                    obj = object.__new__(QuadReg)
+                    obj.__init__(*points)
+                    return obj
+                
+            case _:
+                print('_')
+                pass
 
-class Shape:
-    ...
+        obj = object.__new__(Polygon) 
+        obj.__init__(*points)
+        return obj
+
+    def __init__(self, *points: Point) -> None:
+        edges: list[Segment] = []
+        for i in (x := range(len(points))):
+            edges.append(Segment(points[i % len(x)], points[(i+1) % len(x)]))
+
+        
+        self._center = physics_formula.locate_center(points, edges)
+        self._vertices = tuple(points)
+        self._edges = tuple(edges)
+
+        super().__init__(_center=self._center, _vertices=self._vertices, _edges=self._edges)
+
+    @property
+    def center(self) -> Point:
+        return self._center
+    
+    @property
+    def vertices(self) -> tuple[Point, ...]:
+        return self._vertices
+    
+    @property
+    def edges(self) -> tuple[Segment, ...]:
+        return self._edges
+
+    @property
+    def perimeter(self) -> float:
+        p = 0
+        for edge in self.edges:
+            p += edge.length
+
+        return p
+    @property
+    def area(self) -> float:
+        return physics_formula.shoelace_area(self._vertices)
+
+    def intersects(self, other: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point, Point] | Point | None:
+        ...
 
 
 
 
 class Polygon(Shape):
+    def __init__(self, *points: Point) -> None:
+        super().__init__(*points)
+
+    def __repr__(self) -> str:
+        return f'Polygon'
+
+
+
+
+class Circle(AbstractFigure):
+    def __repr__(self) -> str:
+        return f'Circle'
     ...
 
 
 
 
-class Circle(Shape):
+class Triangle(Shape):
+    def __init__(self, *points: Point) -> None:
+        super().__init__(*points)
+
+    def __repr__(self) -> str:
+        return f'Triangle'
     ...
 
 
 
 
-class Triangle(Polygon):
-    ...
+class QuadReg(Shape):
+    def __init__(self, *points: Point) -> None:
+        super().__init__(*points)
 
-
-
-
-class Rectangle(Polygon):
+    def __repr__(self) -> str:
+        return f'QuadReg'
     ...
 
 
@@ -620,6 +756,48 @@ class physics_formula:
     def to_deg(angle: float) -> float:
         return -math.degrees(angle)
     
+    
+    @staticmethod
+    def check_instance_return_point(a: AbstractPath) -> Point:
+        if isinstance(a, Line) or isinstance(a, Ray):
+            return a.origin.move_through_normal(a.normal)
+        else:
+            return a.end
+
+    @staticmethod 
+    def find_intersection(a: AbstractPath | AbstractFigure, b: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point, Point] | Point | None:
+        if isinstance(a, AbstractPath) and isinstance(b, AbstractPath):
+            return physics_formula._intersects_line(a, b)
+        
+        else:
+            ...
+  
+    @staticmethod
+    def _intersects_line(a: AbstractPath, b: AbstractPath) -> Point | AbstractPath | None:
+        if c := physics_formula.check_collinear(a, b):
+            return c
+
+        t1, t2 = physics_formula.intersects_check(a, b)
+        # print(t1, t2)
+        if t1 == math.inf or t2 == math.inf:
+            return None
+
+        t1_min, t1_max = a.scalar_bounds
+        t2_min, t2_max = b.scalar_bounds
+
+        # print(t1_min, t1_max, t2_min, t2_max)
+        
+        ep = 1e-9
+        if t1_min-ep <= t1 <= t1_max+ep and t2_min-ep <= t2 <= t2_max+ep:
+            if isinstance(a, Line) or isinstance(a, Ray):
+                l = 1
+            
+            else:
+                l = a.length
+                return a.point_at_t(t1*l)
+            
+        return None
+
     @staticmethod
     def intersects_check(a: AbstractPath, b: AbstractPath) -> tuple[float, float]:
         next_point = physics_formula.check_instance_return_point(a)
@@ -632,7 +810,6 @@ class physics_formula:
         x4, y4 = other_next_point.p_x, other_next_point.p_y
 
         denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-        print(denom)
         if math.isclose(denom, 0):
             return math.inf, math.inf
         
@@ -643,11 +820,9 @@ class physics_formula:
         return t1, t2
     
     @staticmethod
-    def check_instance_return_point(a: AbstractPath) -> Point:
-        if isinstance(a, Line) or isinstance(a, Ray):
-            return a.origin.move_through_normal(a.normal)
-        else:
-            return a.end
+    def _intersects_shape(a: AbstractPath, b: AbstractFigure) -> Point | None:
+        ...
+        # find out which line/s and then find the intersection/s
 
     
     @staticmethod
@@ -747,3 +922,41 @@ class physics_formula:
 
         cross = dx1 * dy2 - dy1 * dx2
         return abs(cross) < eps
+    
+    @staticmethod
+    def locate_center(vertices: Sequence[Point], edges: Sequence[Segment]) -> Point:
+        x_list, y_list = zip(*((point.p_x, point.p_y) for point in vertices))
+
+        n = len(vertices)
+        area = 0
+        Cx = 0
+        Cy = 0
+
+        for i in range(n):
+            xi, yi = x_list[i], y_list[i]
+            xi1, yi1 = x_list[(i+1)%n], y_list[(i+1)%n]
+            cross = (xi*yi1 - xi1*yi)
+
+            area += cross
+            Cx += (xi + xi1) * cross
+            Cy += (yi + yi1) * cross
+
+        area *= 0.5
+        Cx /= (6*area)
+        Cy /= (6*area)
+
+        return Point(Cx, Cy)
+    
+    @staticmethod
+    def shoelace_area(vertices: Sequence[Point]) -> float:
+        x_list, y_list = zip(*((point.p_x, point.p_y) for point in vertices))
+        area = 0
+        n = len(vertices)
+
+        for i in range(len(vertices)):
+            xi, yi = x_list[i], y_list[i]
+            xi1, yi1 = x_list[(i+1)%n], y_list[(i+1)%n]
+            cross = (xi*yi1 - xi1*yi)
+            area += cross
+
+        return area
