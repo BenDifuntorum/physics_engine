@@ -21,6 +21,8 @@ class Validator:
                 raise TypeError(f"Attribute '{attr}' must be of type {expected_type.__name__}, "
                                  f"but got {type(value).__name__}")
 
+                                 'asd'
+
 
 
 
