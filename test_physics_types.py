@@ -28,9 +28,15 @@ l11 = Line(p1, n2)
 l12 = Line(p2, n3)
 l13 = Line(p3, n1)
 l14 = Line(p4, n3)
+l1.intersects(l0)
 
 s0 = Segment(Point(2,2), Point(-2,-2))
 s1 = Segment(Point(-2,2), Point(2, -2))
+
+r0 = Ray(Point(-2,-2), Normal(1,1))
+r1 = Ray(Point(2,2), Normal(-1,-1))
+r2 = -r0
+r3 = -r1
 
 def test_point():
     
