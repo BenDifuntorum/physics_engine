@@ -701,8 +701,62 @@ class Polygon(Shape):
 
 
 class Circle(AbstractFigure):
-    def __init__(self, **kwargs: object):
-        super().__init__(**kwargs)
+    _radius: float
+    def __init__(self, center: Point, radius: float) -> None:
+        self._center = center
+        self._radius = abs(radius)
+        self._edges = self.approximate_edge()
+        self._vertices = self.approximate_vertices()
+
+        super().__init__(_center=self._center, 
+                         _radius=self._radius,
+                         _edges=self._edges,
+                         _vertices=self._vertices)
+    
+    def approximate_vertices(self) -> tuple[Point, ...]:
+        segments = 32
+
+        return tuple(
+        (
+            Point(self._center.p_x + self._radius * math.cos(2 * math.pi * i / segments),
+            self._center.p_y + self._radius * math.sin(2 * math.pi * i / segments))
+        )
+        for i in range(segments)
+        )
+
+    def approximate_edge(self) -> tuple[Segment, ...]:
+        vertices = self.approximate_vertices()
+        v = len(vertices)
+
+        segments: list[Segment] = []
+        for i in range(v):
+            p1 = vertices[i]
+            p2 = vertices[(i+1)%v]
+
+            segments.append(Segment(p1,p2))
+
+        return tuple(segments)
+
+
+    @property
+    def center(self) -> Point:
+        return self._center
+    
+    @property
+    def vertices(self) -> tuple[Point, ...]:
+        return self._vertices
+    
+    @property
+    def edges(self) -> tuple[Segment, ...]:
+        return self._edges
+
+    @property
+    def perimeter(self) -> float:
+        return 2 * math.pi * self._radius
+
+    @property
+    def area(self) -> float:
+        return math.pi * self._radius ** 2
 
 
 
@@ -1017,4 +1071,4 @@ class physics_formula:
             cross = (xi*yi1 - xi1*yi)
             area += cross
 
-        return area
+        return abs(area)
