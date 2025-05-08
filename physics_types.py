@@ -565,11 +565,6 @@ class Vector(AbstractFinitePath):
         return cls(pair[0], pair[1])
     
     @property
-    def length(self) -> float:
-        return physics_formula.line_length(self._origin, self._end)
-    
-    
-    @property
     def midpoint(self) -> Point:
         mid_y = (self._end.p_y + self._origin.p_y) / 2
         mid_x = (self._end.p_x + self._origin.p_x) / 2
@@ -600,18 +595,7 @@ class Vector(AbstractFinitePath):
         new_origin = origin.move_through_normal(new_normal, t=-length/2)
         new_end = origin.move_through_normal(new_normal, t=length/2)
         return Segment(new_origin, new_end)
-        
-    def point_at_t(self, t: float) -> Point:
-        p = self._origin.move_through_normal(self._normal, t=t*self.length)
-
-        x_min = min(self._origin.p_x, self._end.p_x)
-        x_max = max(self._origin.p_x, self._end.p_x)
-        y_min = min(self._origin.p_y, self._end.p_y)
-        y_max = max(self._origin.p_y, self._end.p_y)
-
-        if not (x_min <= p.p_x <= x_max and y_min <= p.p_y <= y_max):
-            raise ValueError(f'No point at t={t}')
-        return p
+    
         
 
 
@@ -889,13 +873,10 @@ class physics_formula:
         
         ep = 1e-9
         if t1_min-ep <= t1 <= t1_max+ep and t2_min-ep <= t2 <= t2_max+ep:
-            if isinstance(a, Line) or isinstance(a, Ray):
-                l = 1
-            
-            else:
-                l = a.length
-                
-            return a.point_at_t(t1*l)
+            try:
+                return a.point_at_t(t1)
+            except ValueError:
+                pass
             
         return None
 
