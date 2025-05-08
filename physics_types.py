@@ -48,7 +48,7 @@ class AbstractPath(AbstractObject):
     _end: Point
 
     def __contains__(self, other: Point) -> bool:
-        if physics_formula.contains_check(self, other):
+        if physics_formula.contains_check(other, self):
             return True
         return False
     
@@ -238,22 +238,22 @@ class Point(AbstractObject):
         return False
     
     def __lt__(self, other: Point, normal: Normal) -> bool:
-        ref_line = Line(self, normal)
+        ref_line = RefLine(self, normal)
         t1, t2  = self.loc_on_line(ref_line), other.loc_on_line(ref_line)
         return t1 < t2 if t1 and t2 else False
     
     def __gt__(self, other: Point, normal: Normal) -> bool:
-        ref_line = Line(self, normal)
+        ref_line = RefLine(self, normal)
         t1, t2  = self.loc_on_line(ref_line), other.loc_on_line(ref_line)
         return t1 > t2 if t1 and t2 else False
     
     def __le__(self, other: Point, normal: Normal) -> bool:
-        ref_line = Line(self, normal)
+        ref_line = RefLine(self, normal)
         t1, t2  = self.loc_on_line(ref_line), other.loc_on_line(ref_line)
         return t1 <= t2 if t1 and t2 else False
     
     def __ge__(self, other: Point, normal: Normal) -> bool:
-        ref_line = Line(self, normal)
+        ref_line = RefLine(self, normal)
         t1, t2  = self.loc_on_line(ref_line), other.loc_on_line(ref_line)
         return t1 >= t2 if t1 and t2 else False
         
@@ -404,6 +404,14 @@ class Line(AbstractPath):
     
     def point_at_t(self, t: float=1) -> Point:
         return self._origin.move_through_normal(self._normal, t=t)
+    
+
+
+
+class RefLine(Line):
+    def __init__(self, origin: Point, normal: Normal) -> None:
+        self._origin = origin
+        self._normal = normal
 
     
 
@@ -824,12 +832,26 @@ class physics_formula:
 
         tx = (point.p_x-origin.p_x)/normal.x
         ty = (point.p_y-origin.p_y)/normal.y
-
         if math.isclose(tx, ty):
             return (tx+ty)/2
         
         else:
             return math.nan
+        
+    @staticmethod
+    def contains_check(p: Point, path: AbstractPath) -> bool:
+        ref_line = RefLine(path.origin, path.normal)
+        t = physics_formula.loc_on_line(p, ref_line)
+        if math.isclose(t, 0):
+            return True
+
+        if math.isnan(t):
+            return False
+
+        t_min, t_max = path.scalar_bounds
+        
+        ep = 1e-9
+        return t_min - ep <= t <= t_max + ep  
     
     @staticmethod
     def line_length(start: Point, end: Point) -> float:
@@ -860,7 +882,6 @@ class physics_formula:
     @staticmethod
     def to_deg(angle: float) -> float:
         return -math.degrees(angle)
-    
     
     @staticmethod
     def check_instance_return_point(a: AbstractPath) -> Point:
@@ -938,8 +959,9 @@ class physics_formula:
     
     @staticmethod
     def check_collinear(a: AbstractPath, b: AbstractPath) -> Point | AbstractPath | None:
-        # print(f'{repr(abs(a.normal))}\n{repr(abs(b.normal))}')
-        if abs(a.normal) != abs(b.normal) or a.origin not in b or b.origin not in a:
+        ref_a = Line(a.origin, a.normal)
+        ref_b = Line(b.origin, b.normal)
+        if abs(a.normal) != abs(b.normal) or a.origin not in ref_b or b.origin not in ref_a:
             return None
         
         elif isinstance(a, AbstractFinitePath) and isinstance(b, AbstractFinitePath) or \
@@ -969,7 +991,7 @@ class physics_formula:
     @staticmethod
     def compare_ending_paths(a: AbstractFinitePath | Ray, b: AbstractFinitePath | Ray) -> Point | AbstractPath | None:
         points = [a.origin, a.end, b.origin, b.end]
-        ref_line = Line(a.origin, a.normal)
+        ref_line = RefLine(a.origin, a.normal)
         data = [(point, ref_line) for point in points]
 
         def key(d: tuple[Point, Line]) -> float:
@@ -982,7 +1004,7 @@ class physics_formula:
         
         for point in sorted_points:
             sorting_data.append(physics_formula.loc_on_line(point, ref_line))
-        
+
         p1, p2 = sorted_points[1:3]
 
         if p1 == p2:
@@ -991,6 +1013,9 @@ class physics_formula:
         elif sorting_data[2] == math.inf:
             return Ray(p1, ref_line.normal)
         
+        else:
+            pass
+        
         test_seg = Segment(p1, p2)
         if test_seg == a or test_seg == b:
             return test_seg
@@ -998,18 +1023,8 @@ class physics_formula:
         elif p1 in a and p2 in b and p1 in b and p2 in a:
             return Segment(p1, p2)
         
-    @staticmethod
-    def contains_check(path: AbstractPath, p: Point) -> bool:
-        ref_line = Line(path.origin, path.normal)
-        t = physics_formula.loc_on_line(p, ref_line)
-
-        if math.isnan(t):
-            return False
-
-        t_min, t_max = path.scalar_bounds
-        
-        ep = 1e-9
-        return t_min - ep <= t <= t_max + ep  
+        else:
+            return
     
     @staticmethod
     def closer_to_zero(a: float, b: float) -> float:

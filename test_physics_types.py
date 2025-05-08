@@ -7,6 +7,7 @@ p1 = Point(3, 4)
 p2 = Point(5, 1)
 p3 = Point(5, 7)
 p4 = Point(10, 8)
+p5 = Point(2,2)
 
 n0 = Normal(5, 10)
 n1 = Normal(-5, 5)
@@ -46,7 +47,9 @@ r1 = Ray(Point(2,2), Normal(-1,-1))
 r2 = -r0
 r3 = -r1
 
-physics_formula.loc_on_line(l15.origin, l16)
+# p5 in r1
+# Point(p_x=-2, p_y=-2) in r1
+# physics_formula.loc_on_line(l15.origin, l16)
 
 s2.intersects(s3)
 
