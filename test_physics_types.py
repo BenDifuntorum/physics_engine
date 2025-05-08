@@ -28,15 +28,27 @@ l11 = Line(p1, n2)
 l12 = Line(p2, n3)
 l13 = Line(p3, n1)
 l14 = Line(p4, n3)
-l1.intersects(l0)
+l15 = Line(p0, Normal(1,0))
+l16 = Line(Point(0,2),Normal(1,0))
 
 s0 = Segment(Point(2,2), Point(-2,-2))
 s1 = Segment(Point(-2,2), Point(2, -2))
+s2 = Segment(Point(0,0),Point(0,2))
+s3 = Segment(Point(2,2),Point(2,0))
+s4 = Segment(Point(0,0),Point(2,0))
+s5 = Segment(Point(0,2),Point(2,2))
+s6 = Segment(Point(0,0),Point(2,2))
+s7 = Segment(Point(0,2),Point(2,4))
+
 
 r0 = Ray(Point(-2,-2), Normal(1,1))
 r1 = Ray(Point(2,2), Normal(-1,-1))
 r2 = -r0
 r3 = -r1
+
+physics_formula.loc_on_line(l15.origin, l16)
+
+s2.intersects(s3)
 
 def test_point():
     
