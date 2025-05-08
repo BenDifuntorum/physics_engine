@@ -40,6 +40,9 @@ class AbstractObject(ABC, Validator):
             values.append(f'{attr.strip('_')}={value!r}')
         
         return f"{cls.__name__}({', '.join(values)})"
+    
+    def intersects(self, other: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point | AbstractPath, ...] | Point | None:
+        return physics_formula.find_intersection(self, other)
 
 
 class AbstractPath(AbstractObject):
@@ -91,8 +94,6 @@ class AbstractPath(AbstractObject):
     def point_at_t(self, t: float) -> Point | None:
         pass
 
-    def intersects(self, other: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point, Point] | Point | None:
-        return physics_formula.find_intersection(self, other)
     
 
 
@@ -155,9 +156,6 @@ class AbstractFigure(AbstractObject):
     @abstractmethod
     def area(self) -> float:
         pass
-
-    def intersects(self, other: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point, Point] | Point | None:
-        ...
 
 
 
@@ -893,15 +891,36 @@ class physics_formula:
         
 
     @staticmethod 
-    def find_intersection(a: AbstractPath | AbstractFigure, b: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point, Point] | Point | None:
+    def find_intersection(a: AbstractObject, b: AbstractObject) -> AbstractPath | tuple[Point | AbstractPath, ...] | Point | None:
         if isinstance(a, AbstractPath) and isinstance(b, AbstractPath):
-            return physics_formula._intersects_line(a, b)
+            return physics_formula.intersects_line(a, b)
         
-        else:
-            ...
+        elif isinstance(a, AbstractFigure) and isinstance(b, AbstractPath):
+            intersections: list[Point | AbstractPath] = []
+            for i in a.edges:
+                if intersection := physics_formula.intersects_line(i, b):
+                    intersections.append(intersection)
+            return tuple(intersections)
+        
+        elif isinstance(a, AbstractPath) and isinstance(b, AbstractFigure):
+            intersections: list[Point | AbstractPath] = []
+            for i in b.edges:
+                if intersection := physics_formula.intersects_line(i, a):
+                    intersections.append(intersection)
+            return tuple(intersections)
+        
+        else: 
+            assert isinstance(a, AbstractFigure) and isinstance(b, AbstractFigure)
+            intersections: list[Point | AbstractPath] = []
+            for i in a.edges:
+                for j in b.edges:
+                    if intersection := physics_formula.intersects_line(i, j):
+                        intersections.append(intersection)
+            return tuple(intersections)
+
   
     @staticmethod
-    def _intersects_line(a: AbstractPath, b: AbstractPath) -> Point | AbstractPath | None:
+    def intersects_line(a: AbstractPath, b: AbstractPath) -> Point | AbstractPath | None:
         if c := physics_formula.check_collinear(a, b):
             return c
         
@@ -950,12 +969,6 @@ class physics_formula:
         u = cross(q_minus_p, r) / r_cross_s
 
         return t, u
-
-    @staticmethod
-    def _intersects_shape(a: AbstractPath, b: AbstractFigure) -> Point | None:
-        ...
-        # find out which line/s and then find the intersection/s
-
     
     @staticmethod
     def check_collinear(a: AbstractPath, b: AbstractPath) -> Point | AbstractPath | None:
