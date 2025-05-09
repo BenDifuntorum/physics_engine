@@ -1,8 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from types import GenericAlias
+from types import GenericAlias, UnionType
 from typing import get_type_hints, Sequence, get_origin
-
 import math
 
 
@@ -25,10 +24,15 @@ class Validator:
                 if type(expected_type) == GenericAlias:
                     expected_type = generic_type
 
+                elif type(expected_type) == UnionType:
+                    expected_type = generic_type
+
             if not isinstance(value, expected_type):
-                # print(attr, expected_type.__name__, type(value).__name__)
+                print(attr, expected_type.__name__, type(value).__name__)
                 raise TypeError(f"Attribute {attr} must be of type {expected_type.__name__}, "
                                  f"but got {type(value).__name__}")
+
+
 
 
 class AbstractObject(ABC, Validator):
@@ -45,6 +49,8 @@ class AbstractObject(ABC, Validator):
         return physics_formula.find_intersection(self, other)
 
 
+
+
 class AbstractPath(AbstractObject):
     _origin: Point
     _normal: Normal
@@ -59,6 +65,7 @@ class AbstractPath(AbstractObject):
         if isinstance(other, type(self)):
             return self._origin == other._origin and self._normal == other._normal
         return False
+    
     @property
     def origin(self) -> Point:
         return self._origin
@@ -97,7 +104,6 @@ class AbstractPath(AbstractObject):
     
 
 
-
 class AbstractFinitePath(AbstractPath):
     @property
     def scalar_bounds(self) -> tuple[float, float]:
@@ -124,6 +130,64 @@ class AbstractFinitePath(AbstractPath):
             return
         return p
 
+
+
+class AbstractDirection(AbstractObject):
+    def __add__(self, other: AbstractDirection) -> Vect: 
+        return Vect.normdef(self.x + other.x, self.y + other.y)
+    
+    def __sub__(self, other: AbstractDirection) -> Vect:
+        return Vect.normdef(self.x - other.x, self.y - other.y)
+    
+    def __mul__(self, scalar: float) -> Vect:
+        return Vect.normdef(self.x * scalar, self.y * scalar)
+    
+    def __truediv__(self, scalar: float) -> Vect:
+        return Vect.normdef(self.x / scalar, self.y / scalar)
+    
+    def __str__(self) -> str:
+        return f'At t interval, moves line {self.x}t through x and {self.y}t through y.'
+    
+    @property
+    @abstractmethod
+    def magnitude(self) -> float:
+        pass
+
+    @property
+    @abstractmethod
+    def normal(self) -> Normal:
+        pass
+
+    @property
+    @abstractmethod
+    def x(self) -> float:
+        pass
+    
+    @property
+    @abstractmethod
+    def y(self) -> float:
+        pass
+    
+    def dot(self, other: AbstractDirection) -> float:
+        return physics_formula.dot_product(self.x, self.y, other.x, other.y)
+    
+    def cross(self, other: AbstractDirection) -> float:
+        return physics_formula.cross_product(self.x, self.y, other.x, other.y)
+    
+    def project_on(self, other: AbstractDirection) -> Vect:
+        scalar = self.dot(other.normal)
+        return other.normal * scalar
+    
+    @property
+    @abstractmethod
+    def perpendicular(self) -> AbstractDirection:
+        pass
+      
+    @property
+    @abstractmethod
+    def antiperpendicular(self) -> AbstractDirection:
+        """Negative of the perpendicular"""
+        pass
 
 
 
@@ -161,40 +225,50 @@ class AbstractFigure(AbstractObject):
 
 
 class Movable(AbstractObject):
-    @property
-    @abstractmethod
-    def v_x(self) -> float:
-        pass
+    ...
+    # @property
+    # @abstractmethod
+    # def position(self) -> Point:
+    #     pass
+    
+    # @property
+    # @abstractmethod
+    # def velocity(self) -> Direct:
+    #     pass
 
-    @property
-    @abstractmethod
-    def v_y(self) -> float:
-        pass
+    # @property
+    # @abstractmethod
+    # def angular_velocity(self) -> Direct:
+    #     pass
 
-    @property
-    @abstractmethod
-    def a_x(self) -> float:
-        pass
+    # @property
+    # @abstractmethod
+    # def linear_acceleration(self) -> Direct:
+    #     pass
 
-    @property
-    @abstractmethod
-    def a_y(self) -> float:
-        pass
+    # @property
+    # @abstractmethod
+    # def radial_acceleration(self) -> float:
+    #     pass
     
 
 
 
 class Tangible(AbstractObject):
     ...
+    # @abstractmethod
+    # def collide(self) -> bool:
+    #     pass
+
 
 
 
 
 class Point(AbstractObject):
-    p_x: float | int
-    p_y: float | int
+    p_x: float
+    p_y: float
 
-    def __init__(self, p_x: float | int, p_y: float | int) -> None:
+    def __init__(self, p_x: float, p_y: float) -> None:
         self.p_x = p_x
         self.p_y = p_y
 
@@ -265,11 +339,13 @@ class Point(AbstractObject):
         return physics_formula.loc_on_line(self, line)
 
 
-class Normal(AbstractObject):
-    x: float | int
-    y: float | int
 
-    def __init__(self, x: float | int, y: float | int) -> None:
+
+class Normal(AbstractDirection):
+    _x: float
+    _y: float
+
+    def __init__(self, x: float, y: float) -> None:
         
         if x == 0 and y == 0:
             raise ValueError('Normal cannot be formed from 0 and 0')
@@ -278,18 +354,20 @@ class Normal(AbstractObject):
             x, y = physics_formula.normal_normalize(x, y)
         
         else:
-            self.x = x
-            self.y = y
+            self._x = x
+            self._y = y
 
-        super().__init__(x=x, y=y)
+        super().__init__(_x=x, _y=y)
 
     @classmethod
     def from_pair(cls, l: tuple[float, float]) -> Normal:
         x, y = l
         return cls(x, y)
     
-    def __str__(self) -> str:
-        return f'At t interval, moves line {self.x}t through x and {self.y}t through y.'
+    @classmethod
+    def from_vector(cls, v: Vect) -> Normal:
+        x, y = v.x, v.y
+        return cls(x, y)
 
     def __abs__(self) -> Normal:
         if self.y > 0:
@@ -298,7 +376,7 @@ class Normal(AbstractObject):
             return -self
     
     def __neg__(self) -> Normal:
-        return Normal(-self.x, -self.y)
+        return Normal(-self._x, -self._y)
     
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Normal):
@@ -309,44 +387,155 @@ class Normal(AbstractObject):
         return hash((self.x, self.y))
     
     @property
+    def magnitude(self) -> float:
+        return 1
+    
+    @property
+    def normal(self) -> Normal:
+        return self
+    
+    @property
+    def x(self) -> float:
+        return self._x
+    
+    @property
+    def y(self) -> float:
+        return self._y
+    
+    @property
     def perpendicular(self) -> Normal:
-        return Normal(-self.y, self.x)
+        return Normal(-self._y, self._x)
       
     @property
     def antiperpendicular(self) -> Normal:
         """Negative of the perpendicular"""
-        return Normal(self.y, -self.x)
+        return Normal(self._y, -self._x)
 
 
 
 
-class Particle(Point, Tangible, Movable):
-    def __init__(self, p_x: float, p_y: float, *, v_x: float, v_y: float, a_x: float, a_y: float) -> None:
-        super().__init__(p_x, p_y)
+class Vect(AbstractDirection):
+    _magnitude: float
+    _normal: Normal
 
-        self._v_x = v_x
-        self._v_y = v_y
-        self._a_x = a_x
-        self._a_y = a_y
+    def __init__(self, mag: float, normal: Normal):
+        
+        self._magnitude = mag
+        self._normal = normal
+        
+        super().__init__(_magnitude=self._magnitude, _normal=self._normal)
 
-        super(Movable).__init__(v_x=v_x, v_y=v_y, a_x=a_x, a_y=a_y)
+    @classmethod
+    def normdef(cls, x: float, y: float):
+        normal = Normal(x, y)
+        
+        if x == 0 and y == 0:
+            raise ValueError('Vector cannot be formed from 0 and 0')
+        
+        if y == 0:
+            mag = x / normal.x
+        
+        elif x == 0:
+            mag = y / normal.y
+
+        else:
+            mag = (y/normal.y) + (x/normal.x) / 2
+
+        return cls(mag, normal)
     
     @classmethod
-    def init_md(cls, p_x: float, p_y: float, *, v_m: float, v_d: Normal, a_m: float, a_d: Normal) -> Particle:
-        v_x, v_y = physics_formula.normal_split(v_m, v_d)
-        a_x, a_y = physics_formula.normal_split(a_m, a_d)
-        
-        return cls(p_x, p_y, v_x=v_x, v_y=v_y, a_x=a_x, a_y=a_y)
+    def from_pair(cls, l: tuple[float, float]) -> Vect:
+        return cls.normdef(*l)
 
-    @property
-    def v_m(self) -> float:
-        return math.hypot(self._v_x, self._v_y)
-
-    @property
-    def v_d(self) -> Normal:
-        return Normal(self._v_x, self._v_y)
+    def __abs__(self) -> Vect:
+        if self.y > 0:
+            return self
+        else:
+            return -self
     
+    def __neg__(self) -> Vect:
+        return Vect.normdef(-self.x, -self.y)
+    
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Vect):
+            return math.isclose(self._magnitude, other.magnitude) and self._normal == other._normal
+        return False
+        
+    def __hash__(self) -> int:
+        return hash((self._magnitude, (self.x, self.y)))
+    
+    @property
+    def magnitude(self):
+        return self._magnitude
+    
+    @property
+    def normal(self):
+        return self._normal
+    
+    @property
+    def x(self):
+        return self._magnitude * self._normal.x
+    
+    @property
+    def y(self):
+        return self._magnitude * self._normal.y
 
+    @property
+    def perpendicular(self) -> Vect:
+        return Vect.normdef(-self.y, self.x)
+      
+    @property
+    def antiperpendicular(self) -> Vect:
+        """Negative of the perpendicular"""
+        return Vect.normdef(self.y, -self.x)
+
+
+
+
+class Projectile(Tangible, Movable):
+    def __init__(self, pos: Point, vel: Vect, acc: Vect, rad: float) -> None:
+        self._position = pos
+        self._velocity = vel
+        self._lin_acc = acc
+        self._rad_acc = Vect(rad, vel.normal.perpendicular)
+
+        super().__init__(
+            _position = self._position,
+            _velocity = self._velocity,
+            _lin_acc = self._lin_acc,
+            _rad_acc = self._rad_acc)
+            
+
+    def _apply_vel(self) -> Point:
+        end_x = self._position.p_x + self._velocity.x
+        end_y = self._position.p_y + self._velocity.y
+
+        return Point(end_x, end_y)
+
+    def _apply_lin_acc(self) -> Vect:
+        init_magnitude = self._velocity.magnitude
+        next_vect = self._velocity + self._lin_acc 
+        end_vel = Vect(init_magnitude, next_vect.normal)
+        
+        return end_vel
+    
+    def _apply_rad_acc(self) -> Vect:
+        init_magnitude = self._velocity.magnitude
+        next_vect = self._velocity + self._rad_acc 
+        end_vel = Vect(init_magnitude, next_vect.normal)
+        self._rad_acc = Vect(self._rad_acc.magnitude, end_vel.normal.perpendicular)
+        
+        return end_vel
+
+    def sim_linear_movement(self) -> None:
+        self._velocity += self._apply_lin_acc()
+        self._position = self._apply_vel()
+
+    def sim_radial_movement(self) -> None:
+        self._velocity = self._apply_rad_acc()
+        self._position = self._apply_vel()
+    
+ 
 
 
 class Line(AbstractPath):
@@ -475,7 +664,6 @@ class Segment(AbstractFinitePath):
         return Segment(new_origin, new_end)
     
     
-    
 
 
 class Ray(AbstractPath):
@@ -553,7 +741,7 @@ class Ray(AbstractPath):
 
 
 
-class Vector(AbstractFinitePath):
+class Direct(AbstractFinitePath):
     def __init__(self, origin: Point, end: Point) -> None:
         self._origin = origin
         self._end = end
@@ -577,11 +765,11 @@ class Vector(AbstractFinitePath):
             return True
         return False
     
-    def __neg__(self) -> Vector:
-        return Vector(self._end, self._origin)
+    def __neg__(self) -> Direct:
+        return Direct(self._end, self._origin)
 
     @classmethod
-    def from_pair(cls, pair: tuple[Point, Point]) -> Vector:
+    def from_pair(cls, pair: tuple[Point, Point]) -> Direct:
         return cls(pair[0], pair[1])
     
     @property
@@ -617,7 +805,6 @@ class Vector(AbstractFinitePath):
         return Segment(new_origin, new_end)
     
         
-
 
 
 class Shape(AbstractFigure):
@@ -703,7 +890,6 @@ class Polygon(Shape):
 
 
 
-
 class Circle(AbstractFigure):
     _radius: float
     def __init__(self, center: Point, radius: float) -> None:
@@ -779,7 +965,7 @@ class QuadReg(Shape):
 
 
 
-class Ball(Circle, Particle):
+class Ball(Circle, Projectile):
     ...
 
 
@@ -807,10 +993,10 @@ class physics_formula:
             return dy/dx
 
     @staticmethod
-    def normal_split(magnitude: float, normal: Normal) -> tuple[float, float]:
-        m_x = magnitude * normal.x
-        m_y = magnitude * normal.y
-        return m_x, m_y
+    def vector_split(v: AbstractDirection, rel: AbstractDirection) -> tuple[Vect, Vect]:
+        parallel = v.project_on(rel)
+        perpendicular = v - parallel
+        return parallel, perpendicular
     
     @staticmethod
     def move_through_normal(point: Point, normal: Normal, t: float) -> Point:
@@ -819,7 +1005,6 @@ class physics_formula:
 
         return Point(new_p_x, new_p_y)
     
-
     @staticmethod
     def loc_on_line(point: Point, line: Line) -> float:
         origin, normal = line.origin, line.normal
@@ -889,7 +1074,6 @@ class physics_formula:
         else:
             return a.end
         
-
     @staticmethod 
     def find_intersection(a: AbstractObject, b: AbstractObject) -> AbstractPath | tuple[Point | AbstractPath, ...] | Point | None:
         if isinstance(a, AbstractPath) and isinstance(b, AbstractPath):
@@ -917,13 +1101,11 @@ class physics_formula:
                     if intersection := physics_formula.intersects_line(i, j):
                         intersections.append(intersection)
             return tuple(intersections)
-
   
     @staticmethod
     def intersects_line(a: AbstractPath, b: AbstractPath) -> Point | AbstractPath | None:
         if c := physics_formula.check_collinear(a, b):
             return c
-        
 
         t1, t2 = physics_formula.intersects_check(a, b)
         if t1 == math.inf or t2 == math.inf:
@@ -943,20 +1125,19 @@ class physics_formula:
 
     @staticmethod
     def intersects_check(a: AbstractPath, b: AbstractPath) -> tuple[float, float]:
-        def vector(p1: Point, p2: Point) -> tuple[float, float]:
-            return (p2.p_x - p1.p_x, p2.p_y - p1.p_y)
-
-        def cross(v: tuple[float, float], w: tuple[float, float]) -> float:
-            return v[0] * w[1] - v[1] * w[0]
+        def vector(p1: Point, p2: Point) -> Vect:
+            return Vect.normdef(p2.p_x - p1.p_x, p2.p_y - p1.p_y)
 
         p = a.origin
         r = vector(a.origin, physics_formula.check_instance_return_point(a))
         
         q = b.origin
         s = vector(b.origin, physics_formula.check_instance_return_point(b))
-        r_cross_s = cross(r, s)
-        q_minus_p = (q.p_x - p.p_x, q.p_y - p.p_y)
-        qmp_cross_r = cross(q_minus_p, r)
+        
+        r_cross_s = r.cross(s)
+        q_minus_p = Vect.normdef(q.p_x - p.p_x, q.p_y - p.p_y)
+        
+        qmp_cross_r = q_minus_p.cross(r)
         if math.isclose(r_cross_s, 0.0, abs_tol=1e-9):
             if math.isclose(qmp_cross_r, 0.0, abs_tol=1e-9):
                 # Lines are collinear — may overlap (handle separately if needed)
@@ -965,8 +1146,8 @@ class physics_formula:
                 # Lines are parallel and non-intersecting
                 return math.inf, math.inf
         
-        t = cross(q_minus_p, s) / r_cross_s
-        u = cross(q_minus_p, r) / r_cross_s
+        t = q_minus_p.cross(s) / r_cross_s
+        u = q_minus_p.cross(r) / r_cross_s
 
         return t, u
     
@@ -989,9 +1170,9 @@ class physics_formula:
             # print('Segment | Line ')
             return a if isinstance(a, Segment) else b
         
-        elif isinstance(a, Vector) or isinstance(b, Vector):
-            # print('Vector | Line ')
-            return a if isinstance(a, Vector) else b
+        elif isinstance(a, Direct) or isinstance(b, Direct):
+            # print('Direct | Line ')
+            return a if isinstance(a, Direct) else b
         
         elif isinstance(a, Ray) or isinstance(b, Ray):
             # print('Ray | Line or Ray | Ray')
@@ -1072,7 +1253,7 @@ class physics_formula:
         for i in range(n):
             xi, yi = x_list[i], y_list[i]
             xi1, yi1 = x_list[(i+1)%n], y_list[(i+1)%n]
-            cross = (xi*yi1 - xi1*yi)
+            cross = physics_formula.cross_product(xi, yi, xi1, yi1)
 
             area += cross
             Cx += (xi + xi1) * cross
@@ -1093,7 +1274,20 @@ class physics_formula:
         for i in range(len(vertices)):
             xi, yi = x_list[i], y_list[i]
             xi1, yi1 = x_list[(i+1)%n], y_list[(i+1)%n]
-            cross = (xi*yi1 - xi1*yi)
+            cross = physics_formula.cross_product(xi, yi, xi1, yi1)
             area += cross
 
         return abs(area)
+
+    @staticmethod
+    def cross_product(x1: float, y1: float, x2: float, y2: float) -> float:
+        return x1*y2 - x2*y1
+    
+    @staticmethod
+    def dot_product(x1: float, y1: float, x2: float, y2: float) -> float:
+        return x1*x2 + y1*y2
+    
+
+# sample = Projectile(Point(0,0),Vect.normdef(1,0),Vect.normdef(1,1),0.1)    
+# sample.sim_radial_movement()
+# sample.sim_linear_movement()
