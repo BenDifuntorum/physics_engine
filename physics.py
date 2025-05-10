@@ -3,6 +3,11 @@ from abc import abstractmethod
 
 from physics_types import *
 
+class PhysicsModel:
+    def __init__(self) -> None:
+        pass
+
+    
 
 
 

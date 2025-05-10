@@ -1,8 +1,11 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
+import random
 from types import GenericAlias, UnionType
 from typing import get_type_hints, Sequence, get_origin
 import math
+import pyxel
+
 
 
 class Validator:
@@ -36,6 +39,14 @@ class Validator:
 
 
 class AbstractObject(ABC, Validator):
+    _instances: list[AbstractObject] = []
+
+    def __init__(self, **kwargs: object):
+        super().__init__(**kwargs)
+
+        if type(self) is Segment:
+            AbstractObject._instances.append(self)
+
     def __repr__(self) -> str:
         cls = self.__class__
         values: list[str] = []
@@ -47,6 +58,10 @@ class AbstractObject(ABC, Validator):
     
     def intersects(self, other: AbstractPath | AbstractFigure) -> AbstractPath | tuple[Point | AbstractPath, ...] | Point | None:
         return physics_formula.find_intersection(self, other)
+
+    @classmethod
+    def get_instances(cls) -> list[AbstractObject]:
+        return cls._instances
 
 
 
@@ -81,6 +96,11 @@ class AbstractPath(AbstractObject):
     @property
     @abstractmethod
     def perpendicular(self) -> AbstractPath:
+        pass
+
+    @property
+    @abstractmethod
+    def antiperpendicular(self) -> AbstractPath:
         pass
 
     @property
@@ -225,42 +245,26 @@ class AbstractFigure(AbstractObject):
 
 
 class Movable(AbstractObject):
-    ...
-    # @property
-    # @abstractmethod
-    # def position(self) -> Point:
-    #     pass
+    @property
+    @abstractmethod
+    def position(self) -> Point:
+        pass
     
-    # @property
-    # @abstractmethod
-    # def velocity(self) -> Direct:
-    #     pass
+    @property
+    @abstractmethod
+    def velocity(self) -> Vect:
+        pass
 
-    # @property
-    # @abstractmethod
-    # def angular_velocity(self) -> Direct:
-    #     pass
+    @property
+    @abstractmethod
+    def lin_acc(self) -> Vect:
+        pass
 
-    # @property
-    # @abstractmethod
-    # def linear_acceleration(self) -> Direct:
-    #     pass
-
-    # @property
-    # @abstractmethod
-    # def radial_acceleration(self) -> float:
-    #     pass
+    @property
+    @abstractmethod
+    def rad_acc(self) -> Vect:
+        pass
     
-
-
-
-class Tangible(AbstractObject):
-    ...
-    # @abstractmethod
-    # def collide(self) -> bool:
-    #     pass
-
-
 
 
 
@@ -427,10 +431,13 @@ class Vect(AbstractDirection):
 
     @classmethod
     def normdef(cls, x: float, y: float):
-        normal = Normal(x, y)
+        if x ==0 and y == 0:
+            normal = Normal(1, 0)
+        else:
+            normal = Normal(x, y)
         
         if x == 0 and y == 0:
-            raise ValueError('Vector cannot be formed from 0 and 0')
+            mag = 0
         
         if y == 0:
             mag = x / normal.x
@@ -483,16 +490,27 @@ class Vect(AbstractDirection):
     @property
     def perpendicular(self) -> Vect:
         return Vect.normdef(-self.y, self.x)
-      
+    
     @property
     def antiperpendicular(self) -> Vect:
         """Negative of the perpendicular"""
         return Vect.normdef(self.y, -self.x)
 
+    def reflect(self, other: AbstractPath) -> Vect:
+        refline = RefLine(other.origin, other.normal)
+        normal, antinormal = refline.perpendicular.normal, refline.antiperpendicular.normal
+        normals = [normal, antinormal]
+        
+        def key(norm: AbstractDirection):
+            return self.dot(norm)
+
+        norm_to_use = sorted(normals, key=key)
+        return physics_formula.vector_reflect(self, norm_to_use[0])
 
 
 
-class Projectile(Tangible, Movable):
+
+class Projectile(Movable):
     def __init__(self, pos: Point, vel: Vect, acc: Vect, rad: float) -> None:
         self._position = pos
         self._velocity = vel
@@ -505,6 +523,21 @@ class Projectile(Tangible, Movable):
             _lin_acc = self._lin_acc,
             _rad_acc = self._rad_acc)
             
+    @property
+    def position(self) -> Point:
+        return self._position
+    
+    @property
+    def velocity(self) -> Vect:
+        return self._velocity
+
+    @property
+    def lin_acc(self) -> Vect:
+        return self._lin_acc
+
+    @property
+    def rad_acc(self) -> Vect:
+        return self._rad_acc
 
     def _apply_vel(self) -> Point:
         end_x = self._position.p_x + self._velocity.x
@@ -513,6 +546,13 @@ class Projectile(Tangible, Movable):
         return Point(end_x, end_y)
 
     def _apply_lin_acc(self) -> Vect:
+        init_magnitude = self._velocity.magnitude + self._velocity.magnitude
+        next_vect = self._velocity + self._lin_acc 
+        end_vel = Vect(init_magnitude, next_vect.normal)
+        
+        return end_vel
+    
+    def _apply_lin_dir(self) -> Vect:
         init_magnitude = self._velocity.magnitude
         next_vect = self._velocity + self._lin_acc 
         end_vel = Vect(init_magnitude, next_vect.normal)
@@ -526,16 +566,89 @@ class Projectile(Tangible, Movable):
         self._rad_acc = Vect(self._rad_acc.magnitude, end_vel.normal.perpendicular)
         
         return end_vel
-
-    def sim_linear_movement(self) -> None:
-        self._velocity += self._apply_lin_acc()
-        self._position = self._apply_vel()
-
-    def sim_radial_movement(self) -> None:
-        self._velocity = self._apply_rad_acc()
-        self._position = self._apply_vel()
     
- 
+    def raycast(self) -> Vect:
+        refline = RefLine(self._position, self._velocity.normal)
+        paths = [obj for obj in AbstractObject.get_instances() if isinstance(obj, AbstractPath)]
+        for path in paths:
+            if physics_formula.intersects_check(refline, path):
+                if (new_ray := self._raycast(path)) != self._velocity:
+                    new_normal = new_ray
+            
+        new_normal = self._velocity
+        return new_normal
+
+
+
+    def _raycast(self, other: AbstractPath) -> Vect:
+        refline = RefLine(self._position, self._velocity.normal)
+
+        print(refline, other)
+        print()
+        t1, _ = physics_formula.intersects_check(refline, other)
+
+        upper_bound = self._velocity.magnitude
+        # print(t1, upper_bound)
+        if 1e-6 <= t1 <= upper_bound:
+            reflected = self._velocity.reflect(other)
+            new_vect = Vect(self._velocity.magnitude - t1, reflected.normal)
+            
+            print(reflected, new_vect, t1)
+            print(refline, refline.point_at_t(t1))
+            
+            return self._raycast_recurse(refline.point_at_t(t1), new_vect, upper_bound - t1)
+
+        return self._velocity
+    
+    
+    def _raycast_recurse(self, init_contact: Point, init_vect: Vect, upper_bound: float) -> Vect:
+        refline = RefLine(init_contact, init_vect.normal)
+        paths = [obj for obj in AbstractObject.get_instances() if isinstance(obj, AbstractPath)]
+
+        intersections: dict[float, AbstractPath] = {}
+        for path in paths:
+            t1, _ = physics_formula.intersects_check(refline, path)
+            intersections[t1] = path
+
+        if not intersections:
+            return init_vect
+
+        t1 = min(intersections.keys())
+        other = intersections[t1]
+        print('afasd', t1, upper_bound)
+        if 1e-6 <= t1 <= upper_bound:
+            reflected = self._velocity.reflect(other)
+            new_vect = Vect(upper_bound - t1, reflected.normal)
+            # print(upper_bound - t1)
+            return self._raycast_recurse(refline.point_at_t(t1), new_vect, upper_bound - t1)
+
+        return init_vect
+
+
+
+
+    # def sim_linear_movement(self) -> None:
+    #     self._velocity = self._apply_lin_acc()
+    #     self._position = self._apply_vel()
+
+    # def sim_radial_movement(self) -> None:
+    #     self._velocity = self._apply_rad_acc()
+    #     self._position = self._apply_vel()
+
+    def sim_movement(self) -> None:
+        self._velocity = self._apply_rad_acc()
+        self._velocity = self._apply_lin_dir()
+        self._position = self._apply_vel()
+
+    
+
+
+
+
+class DynamicObject(Projectile):
+    ...
+
+
 
 
 class Line(AbstractPath):
@@ -588,6 +701,14 @@ class Line(AbstractPath):
 
     def perpendicular_at(self, origin: Point) -> Line:
         return Line(origin, self._normal.perpendicular)
+    
+    @property
+    def antiperpendicular(self) -> Line:
+        '''Default antiperpendicular'''
+        return self.antiperpendicular_at(self._origin)
+
+    def antiperpendicular_at(self, origin: Point) -> Line:
+        return Line(origin, self._normal.antiperpendicular)
     
     def point_at_t(self, t: float=1) -> Point:
         return self._origin.move_through_normal(self._normal, t=t)
@@ -971,7 +1092,7 @@ class Ball(Circle, Projectile):
 
 
 
-class Surface(Segment, Tangible):
+class Surface(Segment):
     ...
 
 
@@ -1287,7 +1408,37 @@ class physics_formula:
     def dot_product(x1: float, y1: float, x2: float, y2: float) -> float:
         return x1*x2 + y1*y2
     
+    @staticmethod
+    def vector_reflect(v: AbstractDirection, n: AbstractDirection) -> Vect:
+        normal = n.normal
+        return v - (normal * v.dot(normal)) * 2
 
-# sample = Projectile(Point(0,0),Vect.normdef(1,0),Vect.normdef(1,1),0.1)    
-# sample.sim_radial_movement()
-# sample.sim_linear_movement()
+
+
+# if __name__ == '__main__':
+#     sample = Projectile(Point(400,300),Vect.normdef(15,0),Vect.normdef(0, 0),0)    
+#     walls: list[Segment] = [
+#         Segment(Point(200,200), Point(200,600)),
+#         Segment(Point(200,600), Point(600,600)),
+#         Segment(Point(600,600), Point(600,200)),
+#         Segment(Point(600,200), Point(200,200)),
+#     ]
+#     pyxel.init(800, 800, title='SAMPLE', fps=4, quit_key=pyxel.KEY_Q)
+
+    
+#     def update():
+#         # print(repr(sample.velocity))
+#         # print(AbstractObject.get_instances())
+#         # sample.sim_linear_movement()
+#         # sample.sim_radial_movement()
+#         sample.raycast()
+#         sample.sim_movement()
+
+#     def draw():
+#         col = random.randint(0, 15)
+#         # pyxel.cls(col=pyxel.COLOR_BLACK)
+#         pyxel.circ(x=sample.position.p_x, y=sample.position.p_y, r=5, col=col)
+#         for wall in walls:
+#             pyxel.line(wall.origin.p_x, wall.origin.p_y, wall.end.p_x, wall.end.p_y, col=pyxel.COLOR_RED)
+    
+#     pyxel.run(update, draw)
