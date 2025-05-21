@@ -1,10 +1,8 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from hmac import new
 from types import GenericAlias, UnionType
 from typing import get_type_hints, Sequence, get_origin, cast, Self
 import math
-import pyxel
 
 
 
@@ -32,7 +30,6 @@ class Validator:
                     expected_type = generic_type
 
             if not isinstance(value, expected_type):
-                print(attr, expected_type.__name__, type(value).__name__)
                 raise TypeError(f"Attribute {attr} must be of type {expected_type.__name__}, "
                                  f"but got {type(value).__name__}")
 
@@ -107,6 +104,11 @@ class AbstractPath(AbstractObject):
             return self._origin == other._origin and self._normal == other._normal
         return False
     
+    @classmethod
+    @abstractmethod
+    def from_points(cls, a: Point, b: Point) -> AbstractPath:
+        pass
+
     @property
     def origin(self) -> Point:
         return self._origin
@@ -155,10 +157,6 @@ class AbstractFinitePath(AbstractPath):
     def scalar_bounds(self) -> tuple[float, float]:
         return (0, 1)
 
-    @classmethod
-    @abstractmethod
-    def from_pair(cls, pair: tuple[Point, Point]) -> AbstractFinitePath:
-        pass
 
     @property
     def length(self) -> float:
@@ -234,6 +232,11 @@ class AbstractDirection(AbstractObject):
     def antiperpendicular(self) -> AbstractDirection:
         """Negative of the perpendicular"""
         pass
+
+    @property
+    def unpack(self) -> tuple[float, float]:
+        return self.x, self.y
+
 
 
 
@@ -367,6 +370,13 @@ class Point(AbstractObject):
     
     def loc_on_line(self, line: Line) -> float | None:
         return physics_formula.loc_on_line(self, line)
+    
+    def dist_from_point(self, other: Point) -> float:
+        return physics_formula.point_distance(self, other)
+    
+    @property
+    def unpack(self) -> tuple[float, float]:
+        return self.p_x, self.p_y
 
 
 
@@ -398,6 +408,12 @@ class Normal(AbstractDirection):
     def from_vector(cls, v: Vect) -> Normal:
         x, y = v.x, v.y
         return cls(x, y)
+    
+    @classmethod
+    def from_points(cls, a: Point, b: Point) -> Normal:
+        (x1, y1), (x2, y2) = a.unpack, b.unpack
+        
+        return cls(x2-x1, y2-y1)
 
     def __abs__(self) -> Normal:
         if self.y > 0:
@@ -479,6 +495,14 @@ class Vect(AbstractDirection):
     @classmethod
     def from_pair(cls, l: tuple[float, float]) -> Vect:
         return cls.normdef(*l)
+
+    @classmethod
+    def from_points(cls, a: Point, b: Point) -> Vect:
+        (x1, y1), (x2, y2) = a.unpack, b.unpack
+        
+        mag = a.dist_from_point(b)
+        normal = Normal(x2-x1, y2-y1)
+        return cls(mag, normal)
 
     def __abs__(self) -> Vect:
         if self.y > 0:
@@ -584,9 +608,8 @@ class Projectile(Movable):
         return self._apply_spec_rad_acc(self._rad_acc)
     
     def _apply_spec_lin_acc(self, lin_acc: Vect) -> Vect:
-        init_magnitude = self._velocity.magnitude + self._velocity.magnitude
         next_vect = self._velocity + lin_acc 
-        end_vel = Vect(init_magnitude, next_vect.normal)
+        end_vel = next_vect
         
         return end_vel
     
@@ -628,8 +651,6 @@ class Projectile(Movable):
             point_of_contact = path.point_at_t(t_at_wall)
             assert (point_of_contact) is not None
             
-            # print('lol', excess_vect.x, excess_vect.y, point_of_contact)
-            # print(math.isclose(excess_vect.x, 0, abs_tol=1e-9), math.isclose(excess_vect.y, 0, abs_tol=1e-9))
             if math.isclose(excess_vect.x, 0, abs_tol=1e-14) and math.isclose(excess_vect.y, 0, abs_tol=1e-14):
                 corner_reflected_vect = -init_vect
                 new_position = physics_formula.move_through_normal(init_origin, corner_reflected_vect.normal, init_vect.magnitude)
@@ -658,40 +679,67 @@ class Projectile(Movable):
                 excess_vect = Vect(upper_bound - t_at_refline, reflected.normal)
                 point_of_contact = path.point_at_t(t_at_wall)
                 assert point_of_contact is not None
-                # print(excess_vect, point_of_contact)
                 
                 if math.isclose(excess_vect.x, 0, abs_tol=1e-14) and math.isclose(excess_vect.y, 0, abs_tol=1e-14):
                     corner_reflected_vect = -init_vect
                     new_position = physics_formula.move_through_normal(init_origin, corner_reflected_vect.normal, init_vect.magnitude)
-                    # print(corner_reflected_vect, new_position)
                     return corner_reflected_vect, new_position
 
                 return self._raycast_recurse(point_of_contact, excess_vect, upper_bound - t_at_refline, depth + 1, paths)
         
         new_position = physics_formula.move_through_normal(init_origin, init_vect.normal, init_vect.magnitude)
         
-        # print(new_position, init_vect, init_vect.normal)
         return init_vect, new_position
 
     def sim_movement(self) -> None:
+        # print(self._lin_acc)
         self._velocity = self._apply_rad_acc()
-        self._velocity = self._apply_lin_dir()
+        self._velocity = self._apply_lin_acc()
         self._velocity, self._position = self.raycast()
 
     
 
 
 class DynamicObject(Projectile):
-    ...
+    def __init__(self, pos: Point, max_speed: float) -> None:
+        super().__init__(pos, Vect.from_pair((0, 0)), Vect.from_pair((0, 0)), 0)
+        self._max_speed = max_speed
 
+    @property
+    def max_speed(self) -> float:
+        return self._max_speed
+
+    def move_left(self, a: float):
+        if self._velocity.x >= -self._max_speed:
+            left_acc = Vect(a, Normal(-1, 0))
+            self._lin_acc = left_acc
+
+    def move_right(self, a: float):
+        if self._velocity.x <= self._max_speed:
+            right_acc = Vect(a, Normal(1, 0))
+            self._lin_acc = right_acc
+
+    def move_up(self, a: float):
+        if self._velocity.y >= -self._max_speed:
+            up_acc = Vect(a, Normal(0, -1))
+            self._lin_acc = up_acc
+
+    def move_down(self, a: float):
+        if self._velocity.y <= self._max_speed:
+            down_acc = Vect(a, Normal(0, 1))
+            self._lin_acc = down_acc
+            print(self._lin_acc)
+
+    def stop_acc(self):
+        self._lin_acc = Vect.from_pair((0, 0))
 
 
 
 class Line(AbstractPath):
     def __init__(self, origin: Point, normal: Normal) -> None:
         intercept = physics_formula.find_virtual_intercept(origin, normal)
-        
-        if abs(normal) != Normal(0,1) and isinstance(intercept, Point):
+
+        if abs(normal) != Normal(0, 1) and isinstance(intercept, Point):
             origin = intercept
 
         if normal.y < 0:
@@ -714,6 +762,12 @@ class Line(AbstractPath):
         self._end = Point(end_x, end_y)
 
         super().__init__(_origin=origin, _normal=normal)
+    
+    @classmethod
+    def from_points(cls, a: Point, b: Point) -> Line:
+        normal = Normal.from_points(a, b)
+        return cls(a, normal)
+    
     
     def __str__(self) -> str:
         return f'{type(self).__name__} starting on {repr(self._origin)} with normal {repr(self._normal)}'
@@ -765,8 +819,8 @@ class Segment(AbstractFinitePath):
         self._origin = origin
         self._end = end
         
-        x1, y1 = self._origin.p_x, self._origin.p_y
-        x2, y2 = self._end.p_x, self._end.p_y
+        x1, y1 = self._origin.unpack
+        x2, y2 = self._end.unpack
 
         d = physics_formula.normal_normalize(x2-x1, y2-y1)
         self._normal = Normal.from_pair(d)
@@ -785,8 +839,8 @@ class Segment(AbstractFinitePath):
         return False
 
     @classmethod
-    def from_pair(cls, pair: tuple[Point, Point]) -> Segment:
-        return cls(pair[0], pair[1])
+    def from_points(cls, a: Point, b: Point) -> Segment:
+        return cls(a, b)
     
     @property
     def midpoint(self) -> Point:
@@ -846,11 +900,11 @@ class Ray(AbstractPath):
     
     
     @classmethod
-    def from_points(cls, origin: Point, end: Point) -> Ray:
-        x1, y1 = origin.p_x, origin.p_y
-        x2, y2 = end.p_x, end.p_y
+    def from_points(cls, a: Point, b: Point) -> Ray:
+        x1, y1 = a.unpack
+        x2, y2 = b.unpack
         normal = physics_formula.normal_normalize(x2-x1, y2-y1)
-        return cls(origin, Normal.from_pair(normal))
+        return cls(a, Normal.from_pair(normal))
     
     def __str__(self) -> str:
         return f'{type(self).__name__} starting on {repr(self._origin)} and headed to {repr(self._normal)}'
@@ -903,8 +957,8 @@ class Direct(AbstractFinitePath):
         self._origin = origin
         self._end = end
 
-        x1, y1 = self._origin.p_x, self._origin.p_y
-        x2, y2 = self._end.p_x, self._end.p_y
+        x1, y1 = origin.unpack
+        x2, y2 = end.unpack
 
         d = physics_formula.normal_normalize(x2-x1, y2-y1)
         self._normal = Normal.from_pair(d)
@@ -926,8 +980,8 @@ class Direct(AbstractFinitePath):
         return Direct(self._end, self._origin)
 
     @classmethod
-    def from_pair(cls, pair: tuple[Point, Point]) -> Direct:
-        return cls(pair[0], pair[1])
+    def from_points(cls, a: Point, b: Point) -> Direct:
+        return cls(a, b)
     
     @property
     def midpoint(self) -> Point:
@@ -965,47 +1019,39 @@ class Direct(AbstractFinitePath):
 
 
 class Shape(AbstractFigure):
-    def __new__(cls, *points: Point) -> Point | AbstractPath | Shape | None:
+    @staticmethod
+    def create(*points: Point) -> Shape:
         v = len(points)
-        match v:
-            case 0:
-                return
-            
-            case 1:
-                (p,) = points
-                return p
-            
-            case 2:
-                obj = object.__new__(Segment)
-                return Segment(*points)
-            
-            case 3:
-                obj = object.__new__(Triangle) 
-                obj.__init__(*points)
-                return obj
-            
-            case 4:
-                p1, p2, p3, p4 = points
-                if abs(Segment(p1, p2).normal) == abs(Segment(p3, p4).normal) and \
-                    abs(Segment(p1, p4).normal) == abs(Segment(p2, p3).normal):
-                    obj = object.__new__(QuadReg)
-                    obj.__init__(*points)
-                    return obj
-                
-            case _:
-                pass
+        if v <= 1:
+            raise ValueError('Too few points to make shape!')
 
-        obj = object.__new__(Polygon) 
-        obj.__init__(*points)
-        return obj
+        elif v == 2:
+            radius = physics_formula.point_distance(points[0], points[1])
+            return Circle(points[0], radius)
+
+        elif v == 3:
+            return Triangle(*points)
+        
+        else:
+            centroid = physics_formula.locate_center(points)
+
+            def key(point: Point) -> float:
+                point_center_segment = RefLine.from_points(centroid, point)
+                point_center_normal = point_center_segment.normal
+                x, y = point_center_normal.unpack
+                return math.atan2(y, x)
+            
+            new_points = sorted(points, key=key)
+            if v == 4:
+                return QuadReg(*new_points)
+            return Polygon(*new_points)   
 
     def __init__(self, *points: Point) -> None:
         edges: list[Segment] = []
         for i in (x := range(len(points))):
             edges.append(Segment(points[i % len(x)], points[(i+1) % len(x)]))
-
         
-        self._center = physics_formula.locate_center(points, edges)
+        self._center = physics_formula.locate_center(points)
         self._vertices = tuple(points)
         self._edges = tuple(edges)
 
@@ -1030,6 +1076,7 @@ class Shape(AbstractFigure):
             p += edge.length
 
         return p
+    
     @property
     def area(self) -> float:
         return physics_formula.shoelace_area(self._vertices)
@@ -1047,7 +1094,7 @@ class Polygon(Shape):
 
 
 
-class Circle(AbstractFigure):
+class Circle(Shape):
     _radius: float
     def __init__(self, center: Point, radius: float) -> None:
         self._center = center
@@ -1055,7 +1102,7 @@ class Circle(AbstractFigure):
         self._edges = self.approximate_edge()
         self._vertices = self.approximate_vertices()
 
-        super().__init__(_center=self._center, 
+        Validator.__init__(self, _center=self._center, 
                          _radius=self._radius,
                          _edges=self._edges,
                          _vertices=self._vertices)
@@ -1123,7 +1170,34 @@ class QuadReg(Shape):
     def __init__(self, *points: Point) -> None:
         super().__init__(*points)
 
+    @classmethod
+    def convex(cls, p1: Point, p2: Point, p3: Point, p4: Point) -> QuadReg:
+        points = p1, p2, p3, p4
+        centroid = physics_formula.locate_center(points)
 
+        def key(point: Point) -> float:
+            point_center_segment = RefLine.from_points(centroid, point)
+            point_center_normal = point_center_segment.normal
+            x, y = point_center_normal.unpack
+            return math.atan2(y, x)
+        
+        new_points = sorted(points, key=key)
+        return cls(*new_points)
+
+    @property
+    def upperleft(self) -> Point:
+        (all_x, all_y) = zip(*(vertex.unpack for vertex in self._vertices))
+        return Point(min(all_x), min(all_y))
+    
+    @property
+    def width(self) -> float:
+        all_x, _ = zip(*(vertex.unpack for vertex in self._vertices))
+        return max(all_x) - min(all_x)
+
+    @property
+    def height(self) -> float:
+        _, all_y = zip(*(vertex.unpack for vertex in self._vertices))
+        return max(all_y) - min(all_y)
 
 
 class Ball(Circle, Projectile):
@@ -1141,10 +1215,15 @@ class Surface(Segment):
 class physics_formula:
     
     @staticmethod
+    def point_distance(p1: Point, p2: Point):
+        (x1, y1), (x2, y2) = p1.unpack, p2. unpack
+        return math.hypot(x2-x1, y2-y1)
+
+    @staticmethod
     def line_slope(path: AbstractPath):
-        x1, y1 = path.origin.p_x, path.origin.p_y
+        x1, y1 = path.origin.unpack
         next = path.origin.move_through_normal(path.normal)
-        x2, y2 = next.p_x, next.p_y
+        x2, y2 = next.unpack
 
         dy, dx = y2-y1, x2-x1
         if math.isclose(dx, 0):
@@ -1152,6 +1231,29 @@ class physics_formula:
         
         else: 
             return dy/dx
+        
+    @staticmethod
+    def point_line_distance_formula(point: Point, line: AbstractPath) -> float:
+        x0, y0 = point.unpack
+        x1, y1 = line.origin.unpack
+        x2, y2 = line.end.unpack
+        
+        vect_origin_end = Vect.normdef(x2-x1, y2-y1)
+        vect_point_origin = Vect.normdef(x0-x1, y0-y1)
+
+        t = vect_point_origin.dot(vect_origin_end) / (vect_origin_end.magnitude)**2
+
+        if t < 0:
+            return abs(math.hypot(*(line.origin - point).unpack))
+        
+        elif t > 1:
+            return abs(math.hypot(*(line.end - point).unpack))
+
+        else:
+            closest_point = Point(x1 + t*(x2-x1), y1 + t*(y2-y1))
+            return abs(math.hypot(*(closest_point - point).unpack))
+
+
 
     @staticmethod
     def vector_split(v: AbstractDirection, rel: AbstractDirection) -> tuple[Vect, Vect]:
@@ -1199,8 +1301,8 @@ class physics_formula:
     
     @staticmethod
     def line_length(start: Point, end: Point) -> float:
-        x1, y1 = start.p_x, start.p_y
-        x2, y2 = end.p_x, end.p_y
+        x1, y1 = start.unpack
+        x2, y2 = end.unpack
         
         return math.hypot(y2-y1, x2-x1)
     
@@ -1311,7 +1413,6 @@ class physics_formula:
         
         t = q_minus_p.cross(s) / r_cross_s
         u = q_minus_p.cross(r) / r_cross_s
-        # print(t, u)
         return t, u
     
     @staticmethod
@@ -1326,24 +1427,20 @@ class physics_formula:
             isinstance(a, AbstractFinitePath) and isinstance(b, Ray) or \
             isinstance(a, Ray) and isinstance(b, AbstractFinitePath) or \
             isinstance(a, Ray) and isinstance(b, Ray):
-            # print('AbstractFinitePath | AbstractFinitePath or AbstractFinitePath | Ray')
+    
             if out := physics_formula.compare_ending_paths(a, b):
                 return out
         
         elif isinstance(a, Segment) or isinstance(b, Segment):
-            # print('Segment | Line ')
             return a if isinstance(a, Segment) else b
         
         elif isinstance(a, Direct) or isinstance(b, Direct):
-            # print('Direct | Line ')
             return a if isinstance(a, Direct) else b
         
         elif isinstance(a, Ray) or isinstance(b, Ray):
-            # print('Ray | Line or Ray | Ray')
             return a if isinstance(a, Ray) else b
 
         else:
-            # print('Line | Line')
             return a
             
     @staticmethod
@@ -1407,9 +1504,9 @@ class physics_formula:
             return b, a
     
     @staticmethod
-    def locate_center(vertices: Sequence[Point], edges: Sequence[Segment]) -> Point:
+    def locate_center(vertices: Sequence[Point]) -> Point:
         '''Locate the center of a polygon using the centroid formula.'''
-        x_list, y_list = zip(*((point.p_x, point.p_y) for point in vertices))
+        x_list, y_list = zip(*((point.unpack) for point in vertices))
 
         n = len(vertices)
         area = 0
@@ -1434,7 +1531,7 @@ class physics_formula:
     @staticmethod
     def shoelace_area(vertices: Sequence[Point]) -> float:
         '''Calculate the area of a polygon using the shoelace formula.'''
-        x_list, y_list = zip(*((point.p_x, point.p_y) for point in vertices))
+        x_list, y_list = zip(*((point.unpack) for point in vertices))
         area = 0
         n = len(vertices)
 
@@ -1459,58 +1556,51 @@ class physics_formula:
         normal = n.normal
         return v - (normal * v.dot(normal)) * 2
 
-
-
 if __name__ == '__main__':
-    sample = Projectile(Point(398,550),Vect.normdef(0,11),Vect.normdef(0, 3),0)    
-    # shape2 = Shape(Point(400, 50),
-    #                Point(450, 100),
-    #                Point(450, 700),
-    #                Point(400, 750),
-    #                Point(350, 700),
-    #                Point(350, 100))
-    
-    shape1 = Shape(Point(100, 100), 
-                  Point(200, 200),
-                  Point(500, 50),
-                  Point(600, 400),
-                  Point(500, 500),
-                  Point(700, 700),
-                  Point(100, 700),
-                  Point(175, 500),
-                  Point(30, 350),
-                  Point(75, 150))
-    
-    assert isinstance(shape1, Polygon)
-    walls = shape1.edges
-    # walls: tuple[Segment, ...] = (
-    #     Segment(Point(400,200), Point(600,400)),
-    #     Segment(Point(600,400), Point(400,600)),
-    #     Segment(Point(400,600), Point(200,400)),
-    #     Segment(Point(200,400), Point(400,200)),
-    # )
+    import pyxel
+    box = Shape.create(
+        Point(5, 195),
+        Point(195, 195),
+        Point(195, 5),
+        Point(5, 5)
+    )
 
-    # circle = Circle(Point(400, 400), 200)
-    # walls: tuple[Segment, ...] = circle.edges
-    pyxel.init(800, 800, title='SAMPLE', fps=60, quit_key=pyxel.KEY_Q)
+    walls = box.edges
+    sample = DynamicObject(Point(100, 100), 10)
+    sample.sim_movement()
 
-    
     def update():
+        sample.stop_acc()
+        if pyxel.btn(pyxel.KEY_A):
+            sample.move_left(1)
+        else:
+            sample.move_left(0)
+        
+        if pyxel.btn(pyxel.KEY_D):
+            sample.move_right(1)
+        else:
+            sample.move_right(0)
+        
+        if pyxel.btn(pyxel.KEY_W):    
+            sample.move_up(1)
+        else:
+            sample.move_up(0)
+        
+        if pyxel.btn(pyxel.KEY_S):
+            sample.move_down(1)
+        else:
+            sample.move_down(0)
+
         sample.sim_movement()
-        if pyxel.btn(pyxel.KEY_SPACE):
-            ...
-        if pyxel.btnp(pyxel.KEY_Z):
-            sample.sim_movement()
-
-        if pyxel.btnp(pyxel.KEY_R):
-            sample._velocity *= -1
-
-    def draw():
-        pyxel.cls(col=pyxel.COLOR_BLACK)
-        # pyxel.circ(x=circle.center.p_x, y=circle.center.p_y, r=circle.radius, col=pyxel.COLOR_RED, )
-        # pyxel.circ(x=circle.center.p_x, y=circle.center.p_y, r=circle.radius-1, col=pyxel.COLOR_BLACK, )
-        pyxel.circ(x=sample.position.p_x, y=sample.position.p_y, r=5, col=pyxel.COLOR_WHITE)
-        for wall in walls:
-            pyxel.line(wall.origin.p_x, wall.origin.p_y, wall.end.p_x, wall.end.p_y, col=pyxel.COLOR_RED)
+        
     
+    def draw():
+        pyxel.cls(0)
+        pyxel.circ(sample.position.p_x, sample.position.p_y, 5, 8)
+        pyxel.camera()
+        for wall in walls:
+            pyxel.line(wall.origin.p_x, wall.origin.p_y, wall.end.p_x, wall.end.p_y, 7)
+    
+    pyxel.init(200, 200, title="Physics Simulation", quit_key=pyxel.KEY_Q)
     pyxel.run(update, draw)
+    
