@@ -1,10 +1,11 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-import random
+from hmac import new
 from types import GenericAlias, UnionType
-from typing import get_type_hints, Sequence, get_origin
+from typing import get_type_hints, Sequence, get_origin, cast, Self
 import math
 import pyxel
+
 
 
 
@@ -39,13 +40,38 @@ class Validator:
 
 
 class AbstractObject(ABC, Validator):
-    _instances: list[AbstractObject] = []
-
-    def __init__(self, **kwargs: object):
+    _instances: list[Self] = []
+    
+    def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
+        for cls in self.__class__.__mro__:
+            if cls is object or cls is ABC or cls is Validator:
+                break
+            
+            else:
+                if '_instances' in cls.__dict__:
+                    _instances = cast(list[Self], getattr(cls, '_instances'))
+                    _instances.append(self)
 
-        if type(self) is Segment:
-            AbstractObject._instances.append(self)
+    def __init_subclass__(cls) -> None:
+        cls._instances: list[Self] = []
+
+    def delete(self) -> None:
+        for cls in self.__class__.__mro__:
+            if cls is object or cls is ABC:
+                break
+            
+            else:
+                if '_instances' in cls.__dict__:
+                    _instances = cast(list[Self], getattr(cls, '_instances'))
+                    _instances.remove(self)
+
+    def __del__(self) -> None:
+        try:
+            self.delete()
+        except Exception:
+            pass
+        
 
     def __repr__(self) -> str:
         cls = self.__class__
@@ -60,7 +86,7 @@ class AbstractObject(ABC, Validator):
         return physics_formula.find_intersection(self, other)
 
     @classmethod
-    def get_instances(cls) -> list[AbstractObject]:
+    def get_instances(cls) -> list[Self]:
         return cls._instances
 
 
@@ -431,7 +457,7 @@ class Vect(AbstractDirection):
 
     @classmethod
     def normdef(cls, x: float, y: float):
-        if x ==0 and y == 0:
+        if x == 0 and y == 0:
             normal = Normal(1, 0)
         else:
             normal = Normal(x, y)
@@ -446,7 +472,7 @@ class Vect(AbstractDirection):
             mag = y / normal.y
 
         else:
-            mag = (y/normal.y) + (x/normal.x) / 2
+            mag = ((y/normal.y) + (x/normal.x)) / 2
 
         return cls(mag, normal)
     
@@ -504,8 +530,8 @@ class Vect(AbstractDirection):
         def key(norm: AbstractDirection):
             return self.dot(norm)
 
-        norm_to_use = sorted(normals, key=key)
-        return physics_formula.vector_reflect(self, norm_to_use[0])
+        norm_to_use = sorted(normals, key=key)[0]
+        return physics_formula.vector_reflect(self, norm_to_use)
 
 
 
@@ -540,109 +566,119 @@ class Projectile(Movable):
         return self._rad_acc
 
     def _apply_vel(self) -> Point:
-        end_x = self._position.p_x + self._velocity.x
-        end_y = self._position.p_y + self._velocity.y
+        return self._apply_spec_vec(self._velocity)
+
+    def _apply_spec_vec(self, velocity: Vect) -> Point:
+        end_x = self._position.p_x + velocity.x
+        end_y = self._position.p_y + velocity.y
 
         return Point(end_x, end_y)
-
+    
     def _apply_lin_acc(self) -> Vect:
-        init_magnitude = self._velocity.magnitude + self._velocity.magnitude
-        next_vect = self._velocity + self._lin_acc 
-        end_vel = Vect(init_magnitude, next_vect.normal)
-        
-        return end_vel
+        return self._apply_spec_lin_acc(self._lin_acc)
     
     def _apply_lin_dir(self) -> Vect:
-        init_magnitude = self._velocity.magnitude
-        next_vect = self._velocity + self._lin_acc 
+        return self._apply_spec_lin_dir(self._lin_acc)
+    
+    def _apply_rad_acc(self) -> Vect:
+        return self._apply_spec_rad_acc(self._rad_acc)
+    
+    def _apply_spec_lin_acc(self, lin_acc: Vect) -> Vect:
+        init_magnitude = self._velocity.magnitude + self._velocity.magnitude
+        next_vect = self._velocity + lin_acc 
         end_vel = Vect(init_magnitude, next_vect.normal)
         
         return end_vel
     
-    def _apply_rad_acc(self) -> Vect:
+    def _apply_spec_lin_dir(self, lin_acc: Vect) -> Vect:
         init_magnitude = self._velocity.magnitude
-        next_vect = self._velocity + self._rad_acc 
+        next_vect = self._velocity + lin_acc 
+        end_vel = Vect(init_magnitude, next_vect.normal)
+        
+        return end_vel
+    
+    def _apply_spec_rad_acc(self, rad_acc: Vect) -> Vect:
+        init_magnitude = self._velocity.magnitude
+        next_vect = self._velocity + rad_acc 
         end_vel = Vect(init_magnitude, next_vect.normal)
         self._rad_acc = Vect(self._rad_acc.magnitude, end_vel.normal.perpendicular)
         
         return end_vel
+
     
-    def raycast(self) -> Vect:
+    def raycast(self) -> tuple[Vect, Point]:
         refline = RefLine(self._position, self._velocity.normal)
-        paths = [obj for obj in AbstractObject.get_instances() if isinstance(obj, AbstractPath)]
+        paths = Segment.get_instances()
+        init_origin, init_vect = self._position, self._velocity
         for path in paths:
-            if physics_formula.intersects_check(refline, path):
-                if (new_ray := self._raycast(path)) != self._velocity:
-                    new_normal = new_ray
             
-        new_normal = self._velocity
-        return new_normal
-
-
-
-    def _raycast(self, other: AbstractPath) -> Vect:
-        refline = RefLine(self._position, self._velocity.normal)
-
-        print(refline, other)
-        print()
-        t1, _ = physics_formula.intersects_check(refline, other)
-
-        upper_bound = self._velocity.magnitude
-        # print(t1, upper_bound)
-        if 1e-6 <= t1 <= upper_bound:
-            reflected = self._velocity.reflect(other)
-            new_vect = Vect(self._velocity.magnitude - t1, reflected.normal)
+            result = physics_formula.intersects_check(refline, path)
+            if not result:
+                continue
             
-            print(reflected, new_vect, t1)
-            print(refline, refline.point_at_t(t1))
+            t_at_refline, t_at_wall = result
+            upper_bound = init_vect.magnitude
+
+            ep = 1e-9    
+            if not (ep <= t_at_refline <= upper_bound+ep and ep <= t_at_wall <= 1+ep):
+                continue
             
-            return self._raycast_recurse(refline.point_at_t(t1), new_vect, upper_bound - t1)
+            reflected = init_vect.reflect(path)
+            excess_vect = Vect(init_vect.magnitude - t_at_refline, reflected.normal)
+            point_of_contact = path.point_at_t(t_at_wall)
+            assert (point_of_contact) is not None
+            
+            # print('lol', excess_vect.x, excess_vect.y, point_of_contact)
+            # print(math.isclose(excess_vect.x, 0, abs_tol=1e-9), math.isclose(excess_vect.y, 0, abs_tol=1e-9))
+            if math.isclose(excess_vect.x, 0, abs_tol=1e-14) and math.isclose(excess_vect.y, 0, abs_tol=1e-14):
+                corner_reflected_vect = -init_vect
+                new_position = physics_formula.move_through_normal(init_origin, corner_reflected_vect.normal, init_vect.magnitude)
+                return corner_reflected_vect, new_position
+            
+            excess_vect, new_origin = self._raycast_recurse(point_of_contact, excess_vect, upper_bound - t_at_refline, 0, paths) 
+            return Vect(init_vect.magnitude, excess_vect.normal), new_origin
+        
+        new_position = physics_formula.move_through_normal(init_origin, init_vect.normal, init_vect.magnitude)
+        return init_vect, new_position
 
-        return self._velocity
-    
-    
-    def _raycast_recurse(self, init_contact: Point, init_vect: Vect, upper_bound: float) -> Vect:
-        refline = RefLine(init_contact, init_vect.normal)
-        paths = [obj for obj in AbstractObject.get_instances() if isinstance(obj, AbstractPath)]
+    def _raycast_recurse(self, init_origin: Point, init_vect: Vect, upper_bound: float, depth: float, paths: list[Segment]) -> tuple[Vect, Point]:
+        if depth > 15:
+            return init_vect, init_origin
+        
+        refline = RefLine(init_origin, init_vect.normal)
 
-        intersections: dict[float, AbstractPath] = {}
         for path in paths:
-            t1, _ = physics_formula.intersects_check(refline, path)
-            intersections[t1] = path
+            t_at_refline, t_at_wall = physics_formula.intersects_check(refline, path)
+            
+            ep = 1e-9
+            if (ep <= t_at_refline <= upper_bound and ep <= t_at_wall <= 1+ep) and not (
+                math.isclose(t_at_refline, upper_bound) or math.isclose(t_at_wall, 1)):
+                
+                reflected = init_vect.reflect(path)
+                excess_vect = Vect(upper_bound - t_at_refline, reflected.normal)
+                point_of_contact = path.point_at_t(t_at_wall)
+                assert point_of_contact is not None
+                # print(excess_vect, point_of_contact)
+                
+                if math.isclose(excess_vect.x, 0, abs_tol=1e-14) and math.isclose(excess_vect.y, 0, abs_tol=1e-14):
+                    corner_reflected_vect = -init_vect
+                    new_position = physics_formula.move_through_normal(init_origin, corner_reflected_vect.normal, init_vect.magnitude)
+                    # print(corner_reflected_vect, new_position)
+                    return corner_reflected_vect, new_position
 
-        if not intersections:
-            return init_vect
-
-        t1 = min(intersections.keys())
-        other = intersections[t1]
-        print('afasd', t1, upper_bound)
-        if 1e-6 <= t1 <= upper_bound:
-            reflected = self._velocity.reflect(other)
-            new_vect = Vect(upper_bound - t1, reflected.normal)
-            # print(upper_bound - t1)
-            return self._raycast_recurse(refline.point_at_t(t1), new_vect, upper_bound - t1)
-
-        return init_vect
-
-
-
-
-    # def sim_linear_movement(self) -> None:
-    #     self._velocity = self._apply_lin_acc()
-    #     self._position = self._apply_vel()
-
-    # def sim_radial_movement(self) -> None:
-    #     self._velocity = self._apply_rad_acc()
-    #     self._position = self._apply_vel()
+                return self._raycast_recurse(point_of_contact, excess_vect, upper_bound - t_at_refline, depth + 1, paths)
+        
+        new_position = physics_formula.move_through_normal(init_origin, init_vect.normal, init_vect.magnitude)
+        
+        # print(new_position, init_vect, init_vect.normal)
+        return init_vect, new_position
 
     def sim_movement(self) -> None:
         self._velocity = self._apply_rad_acc()
         self._velocity = self._apply_lin_dir()
-        self._position = self._apply_vel()
+        self._velocity, self._position = self.raycast()
 
     
-
-
 
 
 class DynamicObject(Projectile):
@@ -1068,6 +1104,10 @@ class Circle(AbstractFigure):
     @property
     def area(self) -> float:
         return math.pi * self._radius ** 2
+    
+    @property
+    def radius(self) -> float:
+        return self._radius
 
 
 
@@ -1225,6 +1265,7 @@ class physics_formula:
   
     @staticmethod
     def intersects_line(a: AbstractPath, b: AbstractPath) -> Point | AbstractPath | None:
+        '''Check if two lines intersect.'''
         if c := physics_formula.check_collinear(a, b):
             return c
 
@@ -1246,6 +1287,7 @@ class physics_formula:
 
     @staticmethod
     def intersects_check(a: AbstractPath, b: AbstractPath) -> tuple[float, float]:
+        '''Check if two lines intersect and return the parameters t and u for the intersection point.'''
         def vector(p1: Point, p2: Point) -> Vect:
             return Vect.normdef(p2.p_x - p1.p_x, p2.p_y - p1.p_y)
 
@@ -1269,11 +1311,12 @@ class physics_formula:
         
         t = q_minus_p.cross(s) / r_cross_s
         u = q_minus_p.cross(r) / r_cross_s
-
+        # print(t, u)
         return t, u
     
     @staticmethod
     def check_collinear(a: AbstractPath, b: AbstractPath) -> Point | AbstractPath | None:
+        '''Check if two paths are collinear.'''
         ref_a = Line(a.origin, a.normal)
         ref_b = Line(b.origin, b.normal)
         if abs(a.normal) != abs(b.normal) or a.origin not in ref_b or b.origin not in ref_a:
@@ -1305,6 +1348,7 @@ class physics_formula:
             
     @staticmethod
     def compare_ending_paths(a: AbstractFinitePath | Ray, b: AbstractFinitePath | Ray) -> Point | AbstractPath | None:
+        '''Check if two paths are collinear.'''
         points = [a.origin, a.end, b.origin, b.end]
         ref_line = RefLine(a.origin, a.normal)
         data = [(point, ref_line) for point in points]
@@ -1364,6 +1408,7 @@ class physics_formula:
     
     @staticmethod
     def locate_center(vertices: Sequence[Point], edges: Sequence[Segment]) -> Point:
+        '''Locate the center of a polygon using the centroid formula.'''
         x_list, y_list = zip(*((point.p_x, point.p_y) for point in vertices))
 
         n = len(vertices)
@@ -1388,6 +1433,7 @@ class physics_formula:
     
     @staticmethod
     def shoelace_area(vertices: Sequence[Point]) -> float:
+        '''Calculate the area of a polygon using the shoelace formula.'''
         x_list, y_list = zip(*((point.p_x, point.p_y) for point in vertices))
         area = 0
         n = len(vertices)
@@ -1415,30 +1461,56 @@ class physics_formula:
 
 
 
-# if __name__ == '__main__':
-#     sample = Projectile(Point(400,300),Vect.normdef(15,0),Vect.normdef(0, 0),0)    
-#     walls: list[Segment] = [
-#         Segment(Point(200,200), Point(200,600)),
-#         Segment(Point(200,600), Point(600,600)),
-#         Segment(Point(600,600), Point(600,200)),
-#         Segment(Point(600,200), Point(200,200)),
-#     ]
-#     pyxel.init(800, 800, title='SAMPLE', fps=4, quit_key=pyxel.KEY_Q)
+if __name__ == '__main__':
+    sample = Projectile(Point(398,550),Vect.normdef(0,11),Vect.normdef(0, 3),0)    
+    # shape2 = Shape(Point(400, 50),
+    #                Point(450, 100),
+    #                Point(450, 700),
+    #                Point(400, 750),
+    #                Point(350, 700),
+    #                Point(350, 100))
+    
+    shape1 = Shape(Point(100, 100), 
+                  Point(200, 200),
+                  Point(500, 50),
+                  Point(600, 400),
+                  Point(500, 500),
+                  Point(700, 700),
+                  Point(100, 700),
+                  Point(175, 500),
+                  Point(30, 350),
+                  Point(75, 150))
+    
+    assert isinstance(shape1, Polygon)
+    walls = shape1.edges
+    # walls: tuple[Segment, ...] = (
+    #     Segment(Point(400,200), Point(600,400)),
+    #     Segment(Point(600,400), Point(400,600)),
+    #     Segment(Point(400,600), Point(200,400)),
+    #     Segment(Point(200,400), Point(400,200)),
+    # )
+
+    # circle = Circle(Point(400, 400), 200)
+    # walls: tuple[Segment, ...] = circle.edges
+    pyxel.init(800, 800, title='SAMPLE', fps=60, quit_key=pyxel.KEY_Q)
 
     
-#     def update():
-#         # print(repr(sample.velocity))
-#         # print(AbstractObject.get_instances())
-#         # sample.sim_linear_movement()
-#         # sample.sim_radial_movement()
-#         sample.raycast()
-#         sample.sim_movement()
+    def update():
+        sample.sim_movement()
+        if pyxel.btn(pyxel.KEY_SPACE):
+            ...
+        if pyxel.btnp(pyxel.KEY_Z):
+            sample.sim_movement()
 
-#     def draw():
-#         col = random.randint(0, 15)
-#         # pyxel.cls(col=pyxel.COLOR_BLACK)
-#         pyxel.circ(x=sample.position.p_x, y=sample.position.p_y, r=5, col=col)
-#         for wall in walls:
-#             pyxel.line(wall.origin.p_x, wall.origin.p_y, wall.end.p_x, wall.end.p_y, col=pyxel.COLOR_RED)
+        if pyxel.btnp(pyxel.KEY_R):
+            sample._velocity *= -1
+
+    def draw():
+        pyxel.cls(col=pyxel.COLOR_BLACK)
+        # pyxel.circ(x=circle.center.p_x, y=circle.center.p_y, r=circle.radius, col=pyxel.COLOR_RED, )
+        # pyxel.circ(x=circle.center.p_x, y=circle.center.p_y, r=circle.radius-1, col=pyxel.COLOR_BLACK, )
+        pyxel.circ(x=sample.position.p_x, y=sample.position.p_y, r=5, col=pyxel.COLOR_WHITE)
+        for wall in walls:
+            pyxel.line(wall.origin.p_x, wall.origin.p_y, wall.end.p_x, wall.end.p_y, col=pyxel.COLOR_RED)
     
-#     pyxel.run(update, draw)
+    pyxel.run(update, draw)

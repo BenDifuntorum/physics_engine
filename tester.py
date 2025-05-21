@@ -1,4 +1,3 @@
-
 from physics import PhysicsModel, Ball
 import pyxel
 import argparse
