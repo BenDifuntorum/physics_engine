@@ -728,7 +728,6 @@ class DynamicObject(Projectile):
         if self._velocity.y <= self._max_speed:
             down_acc = Vect(a, Normal(0, 1))
             self._lin_acc = down_acc
-            print(self._lin_acc)
 
     def stop_acc(self):
         self._lin_acc = Vect.from_pair((0, 0))
@@ -1573,23 +1572,19 @@ if __name__ == '__main__':
         sample.stop_acc()
         if pyxel.btn(pyxel.KEY_A):
             sample.move_left(1)
-        else:
-            sample.move_left(0)
+
         
         if pyxel.btn(pyxel.KEY_D):
             sample.move_right(1)
-        else:
-            sample.move_right(0)
+
         
         if pyxel.btn(pyxel.KEY_W):    
             sample.move_up(1)
-        else:
-            sample.move_up(0)
+
         
         if pyxel.btn(pyxel.KEY_S):
             sample.move_down(1)
-        else:
-            sample.move_down(0)
+
 
         sample.sim_movement()
         
